@@ -658,6 +658,16 @@ void BK4819_SetFilterBandwidth(const BK4819_FilterBandwidth_t Bandwidth, const b
 				val |= (0u <<  9);     //  0 RF filter bandwidth when signal is weak
 			}
 			break;
+
+		case BK4819_FILTER_BANDWIDTH_TIGHT: // 1.7kHz
+				val = (0u << 12) |     //  0 RF filter bandwidth
+				  (0u <<  9) |	   //  0 RF filter bandwidth when signal is weak
+				  (0u <<  6) |     // *1 AFTxLPF2 filter Band Width
+				  (1u <<  4) |     //  1 BW Mode Selection
+				  (1u <<  3) |     //  1
+				  (0u <<  2);      //  0 Gain after FM Demodulation
+
+			break;
 	}
 
 	BK4819_WriteRegister(BK4819_REG_43, val);
