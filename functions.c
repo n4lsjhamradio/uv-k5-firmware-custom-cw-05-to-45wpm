@@ -138,6 +138,11 @@ void FUNCTION_PowerSave() {
 
 void FUNCTION_Transmit()
 {
+	volatile uint16_t dummy = BK4819_ReadRegister(BK4819_REG_64);
+	dummy = BK4819_ReadRegister(BK4819_REG_64);
+	dummy = BK4819_ReadRegister(BK4819_REG_64);
+	(void)dummy;
+
 	// if DTMF is enabled when TX'ing, it changes the TX audio filtering !! .. 1of11
 	BK4819_DisableDTMF();
 
@@ -224,7 +229,43 @@ void FUNCTION_Transmit()
 	}
 }
 
+#ifdef ENABLE_CW_MODULATOR
 
+void FUNCTION_Transmit_CW()
+{
+	// TODO: briand debug remove
+	BK4819_ToggleGpioOut(BK4819_GPIO5_PIN1_RED, true);
+	BK4819_ToggleGpioOut(BK4819_GPIO5_PIN1_RED, false);
+	BK4819_ToggleGpioOut(BK4819_GPIO5_PIN1_RED, true);
+
+	gUpdateStatus = true;
+
+	GUI_DisplayScreen();
+	
+	// if DTMF is enabled when TX'ing, it changes the TX audio filtering !! .. 1of11
+	BK4819_DisableDTMF();
+
+	// removed all the DTMF calling code, may or may not be needed for CW
+
+
+	RADIO_SetTxParameters();
+
+	// turn the RED LED on
+	BK4819_ToggleGpioOut(BK4819_GPIO5_PIN1_RED, true);
+
+	BK4819_DisableScramble();
+
+	if (gSetting_backlight_on_tx_rx & BACKLIGHT_ON_TR_TX) {
+		BACKLIGHT_TurnOn();
+	}
+	RADIO_CW_BeginResume();
+
+	// Mark CW TX in progress and clear suspend counter
+	gCW_State = CW_TRANSMITTING;
+	gCW_SuspendCountdown_10ms = 0;
+
+}
+#endif
 
 void FUNCTION_Select(FUNCTION_Type_t Function)
 {
@@ -249,7 +290,12 @@ void FUNCTION_Select(FUNCTION_Type_t Function)
 			return;
 
 		case FUNCTION_TRANSMIT:
-			FUNCTION_Transmit();
+				#ifdef ENABLE_CW_MODULATOR
+				if (gCurrentVfo->Modulation == MODULATION_CW)
+					FUNCTION_Transmit_CW();
+				else
+				#endif
+					FUNCTION_Transmit();
 			break;
 
 		case FUNCTION_MONITOR:

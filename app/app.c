@@ -563,6 +563,11 @@ static void CheckRadioInterrupts(void)
 	if (SCANNER_IsScanning())
 		return;
 
+	#ifdef ENABLE_CW_MODULATOR
+		if (gCurrentFunction == FUNCTION_TRANSMIT && gTxVfo->Modulation == MODULATION_CW)
+			return;
+	#endif
+
 	while (BK4819_ReadRegister(BK4819_REG_0C) & 1u) { // BK chip interrupt request
 		// clear interrupts
 		BK4819_WriteRegister(BK4819_REG_02, 0);
@@ -712,6 +717,12 @@ void APP_EndTransmission(void)
 	RADIO_SendEndOfTransmission();
 
 	gFlagEndTransmission = true;
+
+#ifdef ENABLE_CW_MODULATOR
+	// Clear CW state when ending transmission entirely
+	gCW_State = CW_INACTIVE;
+	gCW_SuspendCountdown_10ms = 0;
+#endif
 
 	if (gMonitor) {
 		 //turn the monitor back on
@@ -993,6 +1004,30 @@ static void CheckKeys(void)
 	{
 		if (GPIO_CheckBit(&GPIOC->DATA, GPIOC_PIN_PTT) || SerialConfigInProgress())
 		{	// PTT released or serial comms config in progress
+
+		#ifdef ENABLE_CW_MODULATOR
+			if(gCW_State != CW_INACTIVE)
+			{
+				gPttDebounceCounter = 0; // keep ptt "pressed" while doing CW transmission
+				// While in CW, transition to suspend on release
+				if (gCW_State == CW_TRANSMITTING)
+				{
+					RADIO_CW_Suspend();
+					gCW_State = CW_SUSPENDED;
+					gCW_SuspendCountdown_10ms = 0;
+					return;
+				}
+				else if (gCW_State == CW_SUSPENDED)
+				{
+					// in CW suspend: count duration and end TX if threshold exceeded
+					if (++gCW_SuspendCountdown_10ms >= cw_suspend_count_10ms) {
+						gCW_State = CW_INACTIVE;
+						gPttDebounceCounter = 3; // skip debounce and fall through
+					}
+				}
+			}
+		#endif
+
 			if (++gPttDebounceCounter >= 3 || SerialConfigInProgress())	    // 30ms
 			{	// stop transmitting
 				ProcessKey(KEY_PTT, false, false);
@@ -1002,12 +1037,29 @@ static void CheckKeys(void)
 			}
 		}
 		else
+		{
 			gPttDebounceCounter = 0;
+		#ifdef ENABLE_CW_MODULATOR
+			// If we're suspended and PTT is pressed again, resume immediately
+			if (gCW_State == CW_SUSPENDED) {
+				gCW_State = CW_TRANSMITTING;
+				boot_counter_10ms   = 0;
+				gCW_SuspendCountdown_10ms = 0;
+				RADIO_CW_BeginResume();
+				return;
+			}
+		#endif
+		}
 	}
 	else if (!GPIO_CheckBit(&GPIOC->DATA, GPIOC_PIN_PTT) && !SerialConfigInProgress())
-	{	// PTT pressed
-		if (++gPttDebounceCounter >= 3)	    // 30ms
-		{	// start transmitting
+	{   // PTT pressed
+	#ifdef ENABLE_CW_MODULATOR
+		if (gCurrentVfo->Modulation == MODULATION_CW && gCW_State == CW_INACTIVE) {
+			gPttDebounceCounter = 3; // for CW we skip debounce, drop through to start TX
+		}
+	#endif
+		if (++gPttDebounceCounter >= 3)     // 30ms
+		{   // start transmitting
 			boot_counter_10ms   = 0;
 			gPttDebounceCounter = 0;
 			gPttIsPressed       = true;
@@ -1116,7 +1168,11 @@ void APP_TimeSlice10ms(void)
 	if (gCurrentFunction != FUNCTION_POWER_SAVE || !gRxIdleMode)
 		CheckRadioInterrupts();
 
-	if (gCurrentFunction == FUNCTION_TRANSMIT)
+	if (gCurrentFunction == FUNCTION_TRANSMIT 
+#ifdef ENABLE_CW_MODULATOR
+		&& gCurrentVfo->Modulation != MODULATION_CW
+#endif
+	)
 	{	// transmitting
 #ifdef ENABLE_AUDIO_BAR
 		if (gSetting_mic_bar && (gFlashLightBlinkCounter % (150 / 10)) == 0) // once every 150ms
@@ -1232,6 +1288,7 @@ void APP_TimeSlice10ms(void)
 #endif
 
 	CheckKeys();
+
 }
 
 void cancelUserInputModes(void)
@@ -1602,7 +1659,7 @@ static void ProcessKey(KEY_Code_t Key, bool bKeyPressed, bool bKeyHeld)
 
 	bool lowBatPopup = gLowBattery && !gLowBatteryConfirmed &&  gScreenToDisplay == DISPLAY_MAIN;
 
-	if ((gEeprom.KEY_LOCK || lowBatPopup) && gCurrentFunction != FUNCTION_TRANSMIT && Key != KEY_PTT)
+	if (Key != KEY_PTT && (gEeprom.KEY_LOCK || lowBatPopup) && gCurrentFunction != FUNCTION_TRANSMIT) 
 	{	// keyboard is locked or low battery popup
 
 		// close low battery popup

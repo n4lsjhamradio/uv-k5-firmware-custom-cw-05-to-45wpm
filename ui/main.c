@@ -140,7 +140,7 @@ void UI_DisplayAudioBar(void)
 #if defined(ENABLE_ALARM) || defined(ENABLE_TX1750)
 		if (gAlarmState != ALARM_STATE_OFF)
 			return;
-#endif
+#endif	
 		const unsigned int voice_amp  = BK4819_GetVoiceAmplitudeOut();  // 15:0
 
 		// make non-linear to make more sensitive at low values
@@ -704,7 +704,11 @@ void UI_DisplayMain(void)
 		const bool rx = FUNCTION_IsRx();
 
 #ifdef ENABLE_AUDIO_BAR
-		if (gSetting_mic_bar && gCurrentFunction == FUNCTION_TRANSMIT) {
+		if (gSetting_mic_bar && gCurrentFunction == FUNCTION_TRANSMIT 
+#ifdef ENABLE_CW_MODULATOR
+			&& gCurrentVfo->Modulation != MODULATION_CW
+#endif
+		) {	
 			center_line = CENTER_LINE_AUDIO_BAR;
 			UI_DisplayAudioBar();
 		}
