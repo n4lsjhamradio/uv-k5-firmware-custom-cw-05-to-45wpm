@@ -228,6 +228,15 @@ void SETTINGS_InitEEPROM(void)
 		gEeprom.SCANLIST_PRIORITY_CH2[i] =  Data[j + 2];
 	}
 
+#ifdef ENABLE_CW_MODULATOR
+	// 0F20..0F22
+	EEPROM_ReadBuffer(0x0F20, Data, 3);
+	gEeprom.CW_TONE_FREQUENCY = (Data[0] & 0x80) == 0 ? (Data[0] & 0xf) * 5 : 5;  // 0 == off, other values represent 50 Hz steps above 450Hz, default 700
+	gEeprom.CW_SIDETONE_LEVEL = (Data[0] & 0x70) == 0 ? 0 : 1; // any high-nibble bit apart from highest being set means on, default on
+	gEeprom.CW_KEY_WPM        = Data[1] < 30 ? Data[1] : 18;
+	gEeprom.CW_KEY_INPUT      = Data[2] < ARRAY_SIZE(gSubMenu_KEY_INPUT) ? Data[2] : 0;
+#endif
+
 	// 0F40..0F47
 	EEPROM_ReadBuffer(0x0F40, Data, 8);
 	gSetting_F_LOCK            = (Data[0] < F_LOCK_LEN) ? Data[0] : F_LOCK_DEF;
@@ -570,6 +579,12 @@ void SETTINGS_SaveSettings(void)
 	State[7] = 0xFF;
 	EEPROM_WriteBuffer(0x0F18, State);
 
+	memset(State, 0xff, sizeof(State));
+	State[0] = (gEeprom.CW_TONE_FREQUENCY / 5) | (gEeprom.CW_SIDETONE_LEVEL << 4);
+	State[1] = gEeprom.CW_KEY_WPM;
+	State[2] = gEeprom.CW_KEY_INPUT;
+	EEPROM_WriteBuffer(0x0F20, State);
+
 	memset(State, 0xFF, sizeof(State));
 	State[0]  = gSetting_F_LOCK;
 	State[1]  = gSetting_350TX;
@@ -759,6 +774,9 @@ buf[1] = 0
 #endif
 #ifdef ENABLE_SPECTRUM
     | (1 << 5)
+#endif
+#ifdef ENABLE_CW_MODULATOR
+	| (1 << 6)
 #endif
 ;
 	EEPROM_WriteBuffer(0x1FF0, buf);

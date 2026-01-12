@@ -123,6 +123,12 @@ const t_menu_item MenuList[] =
 	{"BatVol", VOICE_ID_INVALID,                       MENU_VOL           }, // was "VOL"
 	{"RxMode", VOICE_ID_DUAL_STANDBY,                  MENU_TDR           },
 	{"Sql",    VOICE_ID_SQUELCH,                       MENU_SQL           },
+#ifdef ENABLE_CW_MODULATOR
+	{"CWfreq", VOICE_ID_INVALID,                       MENU_CW_FREQ       },
+	{"CWsdtn", VOICE_ID_INVALID,                       MENU_CW_SIDETONE_LEVEL},
+	{"CWKeyr", VOICE_ID_INVALID,                       MENU_CW_KEY_WPM	  },
+	{"CWport", VOICE_ID_INVALID,                       MENU_CW_KEY_INPUT  },
+#endif
 
 	// hidden menu items from here on
 	// enabled if pressing both the PTT and upper side button at power-on
@@ -369,6 +375,17 @@ const t_sidefunction gSubMenu_SIDEFUNCTIONS[] =
 };
 
 const uint8_t gSubMenu_SIDEFUNCTIONS_size = ARRAY_SIZE(gSubMenu_SIDEFUNCTIONS);
+
+#ifdef ENABLE_CW_MODULATOR
+const char* gSubMenu_KEY_INPUT[] =
+{
+	"PTT\nHandKey",
+	"PTT dit\nSD1 dah",
+	"PTT dah\nSD1 dit",
+	"tip dit\nrng dah",
+	"tip dah\nrng dit"
+};
+#endif
 
 bool    gIsInSubMenu;
 uint8_t gMenuCursor;
@@ -843,6 +860,26 @@ void UI_DisplayMenu(void)
 			strcpy(String, gSubMenu_SIDEFUNCTIONS[gSubMenuSelection].name);
 			break;
 
+#ifdef ENABLE_CW_MODULATOR
+		case MENU_CW_FREQ:
+			if(gSubMenuSelection == 0)
+				strcpy(String, "Off");
+			else 
+				sprintf(String, "%dHz", 450 + gSubMenuSelection * 50);
+			break;
+
+		case MENU_CW_SIDETONE_LEVEL:
+			strcpy(String, gSubMenu_OFF_ON[gSubMenuSelection]);
+			break;
+
+		case MENU_CW_KEY_WPM:
+			sprintf(String, "%d WPM", gSubMenuSelection);
+			break;
+
+		case MENU_CW_KEY_INPUT:
+			strcpy(String, gSubMenu_KEY_INPUT[gSubMenuSelection]);
+			break;
+#endif
 	}
 
 	if (!already_printed)

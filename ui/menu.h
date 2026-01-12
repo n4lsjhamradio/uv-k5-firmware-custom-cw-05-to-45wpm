@@ -123,7 +123,13 @@ enum
 	MENU_F2SHRT,
 	MENU_F2LONG,
 	MENU_MLONG,
-	MENU_BATTYP
+	MENU_BATTYP,
+#ifdef ENABLE_CW_MODULATOR
+	MENU_CW_FREQ,
+	MENU_CW_SIDETONE_LEVEL,
+	MENU_CW_KEY_INPUT,
+	MENU_CW_KEY_WPM
+#endif
 };
 
 extern const uint8_t FIRST_HIDDEN_MENU_ITEM;
@@ -162,6 +168,8 @@ extern const char        gSubMenu_SCRAMBLER[11][7];
 typedef struct {char* name; uint8_t id;} t_sidefunction;
 extern const uint8_t 		 gSubMenu_SIDEFUNCTIONS_size;
 extern const t_sidefunction gSubMenu_SIDEFUNCTIONS[];
+extern const char		gSubmenu_SIDETONE[9][6];
+extern const char*        gSubMenu_KEY_INPUT[6];
 				         
 extern bool              gIsInSubMenu;
 				         
