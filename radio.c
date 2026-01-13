@@ -398,6 +398,9 @@ void RADIO_ConfigureSquelchAndOutputPower(VFO_Info_t *pInfo)
 	FREQUENCY_Band_t Band = FREQUENCY_GetBand(pInfo->pRX->Frequency);
 	uint16_t Base = (Band < BAND4_174MHz) ? 0x1E60 : 0x1E00;
 
+	// if(pInfo->Modulation == MODULATION_CW)
+	// 	LogUart("CW squelch set to off\n");
+		
 	if (gEeprom.SQUELCH_LEVEL == 0
 	#ifdef ENABLE_CW_MODULATOR
 		|| pInfo->Modulation == MODULATION_CW
@@ -1089,23 +1092,14 @@ void RADIO_PrepareCssTX(void)
 void RADIO_CW_BeginResume(void)
 {
 	// Setup and begin CW transmission, either first time or resuming after suspend
-
 	BK4819_SetupPowerAmplifier(gCurrentVfo->TXP_CalculatedSetting, gCurrentVfo->pTX->Frequency);
 
-	// Don't send AF to RF during CW
-	BK4819_EnterTxMute();
-
-	// Enable Tone1 with gain 20, Tone2 disabled
-	BK4819_WriteRegister(BK4819_REG_70,
-		BK4819_REG_70_ENABLE_TONE1 |
-		(20u << BK4819_REG_70_SHIFT_TONE1_TUNING_GAIN));
-
 	// Set local AF sidetone freq in Hz
-	BK4819_SetScrambleFrequencyControlWord(450+(gEeprom.CW_TONE_FREQUENCY*10));
+	BK4819_SetScrambleFrequencyControlWord(500+(gEeprom.CW_TONE_FREQUENCY*10));
 
 	// Use AF ALAM mode for CW as a sidetone
-	BK4819_SetAF(BK4819_AF_ALAM);
-	//BK4819_WriteRegister(0x03, 1 << 9);
+	//BK4819_SetAF(BK4819_AF_ALAM);
+
 	// Setup the Tx/Rx blocks for CW transmission
 	BK4819_EnableTXLink();
 
@@ -1120,9 +1114,12 @@ void RADIO_CW_Suspend(void)
 	// Set PA bias to 0
 	BK4819_SetupPowerAmplifier(0, 0);
 
+	// 0 gain on tone1
+	//BK4819_WriteRegister(BK4819_REG_70,	BK4819_REG_70_ENABLE_TONE1 );
+
 	// Set TONE1 to 0 Hz
 	BK4819_SetScrambleFrequencyControlWord(0);
-	//AUDIO_AudioPathOff();
+	
 	// Turn off the red LED
 	BK4819_ToggleGpioOut(BK4819_GPIO5_PIN1_RED, false);
 }
