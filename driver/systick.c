@@ -29,21 +29,20 @@ void SYSTICK_Init(void)
 
 void SYSTICK_DelayUs(uint32_t Delay)
 {
-	const uint32_t ticks = Delay * gTickMultiplier;
-	uint32_t elapsed_ticks = 0;
-	uint32_t Start = SysTick->LOAD;
-	uint32_t Previous = SysTick->VAL;
-	do {
-		uint32_t Current;
+	const uint32_t ticks = Delay * gTickMultiplier; // target CPU cycles
+	const uint32_t reload = SysTick->LOAD;          // current reload value (period = reload + 1)
+	uint32_t elapsed = 0;
+	uint32_t prev = SysTick->VAL;
 
-		do {
-			Current = SysTick->VAL;
-		} while (Current == Previous);
-
-		uint32_t Delta = ((Current < Previous) ? - Current : Start - Current);
-
-		elapsed_ticks += Delta + Previous;
-
-		Previous = Current;
-	} while (elapsed_ticks < ticks);
+	while (elapsed < ticks) {
+		uint32_t cur = SysTick->VAL;
+		if (cur != prev) {
+			// SysTick counts down; handle wrap: when counter reloads, cur > prev
+			uint32_t delta = (cur <= prev)
+							   ? (prev - cur)
+							   : (prev + ((reload + 1U) - cur));
+			elapsed += delta;
+			prev = cur;
+		}
+	}
 }
