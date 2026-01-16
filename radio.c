@@ -781,6 +781,9 @@ void RADIO_SetTxParameters(void)
 {
 	BK4819_FilterBandwidth_t Bandwidth = gCurrentVfo->CHANNEL_BANDWIDTH;
 
+	#ifdef ENABLE_CW_MODULATOR
+	if(gTxVfo->Modulation != MODULATION_CW || gEeprom.CW_SIDETONE_LEVEL == 0)
+	#endif
 	AUDIO_AudioPathOff();
 
 	gEnableSpeaker = false;
@@ -1102,14 +1105,11 @@ void RADIO_CW_BeginResume(void)
 	// Setup and begin CW transmission, either first time or resuming after suspend
 	BK4819_SetupPowerAmplifier(gCurrentVfo->TXP_CalculatedSetting, gCurrentVfo->pTX->Frequency);
 
-	// Set local AF sidetone freq in Hz
-	BK4819_SetScrambleFrequencyControlWord(500+(gEeprom.CW_TONE_FREQUENCY*10));
-
-	// Use AF ALAM mode for CW as a sidetone
-	//BK4819_SetAF(BK4819_AF_ALAM);
-
 	// Setup the Tx/Rx blocks for CW transmission
 	BK4819_EnableTXLink();
+
+	// Set local AF sidetone freq in Hz
+	BK4819_SetScrambleFrequencyControlWord(500+(gEeprom.CW_TONE_FREQUENCY*10));
 
 	// Turn on the red LED
 	BK4819_ToggleGpioOut(BK4819_GPIO5_PIN1_RED, true);
@@ -1117,6 +1117,7 @@ void RADIO_CW_BeginResume(void)
 
 void RADIO_CW_Suspend(void)
 {
+	gCW_State = CW_SUSPENDED;
 	// Suspend CW transmission - "QSK" key up, be ready to start RF again quickly - don't actually exit TX mode
 
 	// Set PA bias to 0

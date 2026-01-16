@@ -825,7 +825,7 @@ void MENU_AcceptSetting(void)
 
 	#ifdef ENABLE_CW_MODULATOR
 		case MENU_CW_KEY_WPM:
-			gEeprom.CW_KEY_WPM = gSubMenuSelection + 12;
+			gEeprom.CW_KEY_WPM = gSubMenuSelection;
 			CW_KeyerReconfigure();
 			break;
 

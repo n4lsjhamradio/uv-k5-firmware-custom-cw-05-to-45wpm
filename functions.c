@@ -138,11 +138,6 @@ void FUNCTION_PowerSave() {
 
 void FUNCTION_Transmit()
 {
-	volatile uint16_t dummy = BK4819_ReadRegister(BK4819_REG_64);
-	dummy = BK4819_ReadRegister(BK4819_REG_64);
-	dummy = BK4819_ReadRegister(BK4819_REG_64);
-	(void)dummy;
-
 	// if DTMF is enabled when TX'ing, it changes the TX audio filtering !! .. 1of11
 	BK4819_DisableDTMF();
 
@@ -250,7 +245,7 @@ void FUNCTION_Transmit_CW()
 	BK4819_DisableDTMF();
 
 	// removed all the DTMF calling code, may or may not be needed for CW
-\
+
 	RADIO_SetTxParameters();
 
 	// turn the Green LED off
@@ -261,10 +256,6 @@ void FUNCTION_Transmit_CW()
 		BACKLIGHT_TurnOn();
 	}
 	
-	// Hear the sidetone?
-	if(gEeprom.CW_SIDETONE_LEVEL)
-		AUDIO_AudioPathOn();
-
 	// Don't send AF to RF during CW
 	BK4819_EnterTxMute();
 	BK4819_SetScrambleFrequencyControlWord(500+(gEeprom.CW_TONE_FREQUENCY*10));
