@@ -75,6 +75,8 @@
 #include "app/cwkeyer.h"
 #endif
 
+
+#include "driver/uart.h"
 static bool flagSaveVfo;
 static bool flagSaveSettings;
 static bool flagSaveChannel;
@@ -836,7 +838,9 @@ void APP_Update(void)
 		HandleFunction();
 
 #ifdef ENABLE_CW_MODULATOR
-	if (gTxVfo->Modulation == MODULATION_CW && gEeprom.CW_KEY_INPUT != CW_KEY_INPUT_HANDKEY) 
+
+// 	static uint32_t local_counter = 0;
+	if (gTxVfo->Modulation == MODULATION_CW) 
 	{
 		CW_Action_t act = CW_HandleState();
 		// add a new action from the FSM: CW begin - when we were totally idle and now a key down event happened
@@ -847,21 +851,35 @@ void APP_Update(void)
 
 		if (act == CW_ACTION_CARRIER_ON)  
 		{
-			if(gCW_State != CW_INACTIVE)
-			{	FUNCTION_Transmit_CW();
+			if(gCW_State == CW_INACTIVE)
+			{	
+				UART_LogSend("CW Transmit Start\n", 18);
+				FUNCTION_Transmit_CW();
+				gPttIsPressed = true;
 				gCurrentFunction = FUNCTION_TRANSMIT;
 			}
 			else
 			{
+				UART_LogSend("CW Resume\n", 10);
 				RADIO_CW_BeginResume();
 			}
 		}
 		if (act == CW_ACTION_CARRIER_OFF) {
+
+	UART_Send("CW Suspend\n", 11);
 			RADIO_CW_Suspend();
 			// let the process keys function handle the timeout to end transmission
 	
 		}
 	}
+	// else 
+	// {
+	// 	if(++local_counter% 1000 == 0)
+	// 	{
+
+	// 		UART_Send("Not in CW mode\r\n", 17);
+	// 	}
+	// }
 #endif
 
 #ifdef ENABLE_FMRADIO
@@ -1037,7 +1055,22 @@ static void CheckKeys(void)
 		if (GPIO_CheckBit(&GPIOC->DATA, GPIOC_PIN_PTT) || SerialConfigInProgress())
 		{	// PTT released or serial comms config in progress
 
-		#ifdef ENABLE_CW_MODULATOR
+#ifdef ENABLE_CW_MODULATOR
+			if(gCW_State != CW_INACTIVE)
+			{
+				gPttDebounceCounter = 0; // keep ptt "pressed" while doing CW transmission
+			}
+			if (gCW_State == CW_SUSPENDED)
+			{
+				// in CW suspend: count duration and end TX if threshold exceeded
+				if (++gCW_SuspendCountdown_10ms >= cw_suspend_count_10ms) {
+					gCW_State = CW_INACTIVE;
+					gPttDebounceCounter = 3; // skip debounce and fall through
+				}
+			}
+#endif
+
+		#ifdef NOT_CW  //ENABLE_CW_MODULATOR
 			if(gCW_State != CW_INACTIVE)
 			{
 				gPttDebounceCounter = 0; // keep ptt "pressed" while doing CW transmission
@@ -1071,7 +1104,7 @@ static void CheckKeys(void)
 		else
 		{
 			gPttDebounceCounter = 0;
-		#ifdef ENABLE_CW_MODULATOR
+		#ifdef NOT_CW  //ENABLE_CW_MODULATOR
 			// If we're suspended and PTT is pressed again, resume immediately
 			if (gCW_State == CW_SUSPENDED) {
 				gCW_State = CW_TRANSMITTING;
@@ -1086,8 +1119,8 @@ static void CheckKeys(void)
 	else if (!GPIO_CheckBit(&GPIOC->DATA, GPIOC_PIN_PTT) && !SerialConfigInProgress())
 	{   // PTT pressed
 	#ifdef ENABLE_CW_MODULATOR
-		if (gCurrentVfo->Modulation == MODULATION_CW && gCW_State == CW_INACTIVE) {
-			gPttDebounceCounter = 3; // for CW we skip debounce, drop through to start TX
+		if (gTxVfo->Modulation == MODULATION_CW) {
+			gPttDebounceCounter = 0; // for CW we handle PTT in the keyer, don't allow ProcessKey to see it
 		}
 	#endif
 		if (++gPttDebounceCounter >= 3)     // 30ms
