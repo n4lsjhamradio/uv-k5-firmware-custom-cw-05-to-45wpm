@@ -125,10 +125,10 @@ const t_menu_item MenuList[] =
 	{"Sql",    VOICE_ID_SQUELCH,                       MENU_SQL           },
 #ifdef ENABLE_CW_MODULATOR
 	{"CWfreq", VOICE_ID_INVALID,                       MENU_CW_FREQ       },
-	{"CWtone", VOICE_ID_INVALID,                       MENU_CW_SIDETONE_LEVEL},
-	{"CWmode", VOICE_ID_INVALID,                       MENU_CW_KEYER_MODE },
-	{"CWKeyr", VOICE_ID_INVALID,                       MENU_CW_KEY_WPM	  },
-	{"CWkyin", VOICE_ID_INVALID,                       MENU_CW_KEY_INPUT  },
+	{"CWtnvol", VOICE_ID_INVALID,                      MENU_CW_SIDETONE_LEVEL},
+	{"CWkmode", VOICE_ID_INVALID,                      MENU_CW_KEYER_MODE },
+	{"CWkwpm", VOICE_ID_INVALID,                       MENU_CW_KEY_WPM	  },
+	{"CWkin", VOICE_ID_INVALID,                        MENU_CW_KEY_INPUT  },
 #endif
 
 	// hidden menu items from here on
@@ -875,7 +875,10 @@ void UI_DisplayMenu(void)
 			break;
 
 		case MENU_CW_SIDETONE_LEVEL:
-			strcpy(String, gSubMenu_OFF_ON[gSubMenuSelection]);
+			if (gSubMenuSelection == 0)
+				strcpy(String, "OFF");
+			else
+				sprintf(String, "%u", gSubMenuSelection);
 			break;
 
 		case MENU_CW_KEYER_MODE:
