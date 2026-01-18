@@ -31,6 +31,9 @@
 
 #include "app/app.h"
 #include "app/dtmf.h"
+#ifdef ENABLE_CW_MODULATOR
+	#include "app/cwkeyer.h"
+#endif
 #include "bsp/dp32g030/gpio.h"
 #include "bsp/dp32g030/syscon.h"
 
@@ -41,6 +44,9 @@
 #include "driver/systick.h"
 #ifdef ENABLE_UART
 	#include "driver/uart.h"
+#endif
+#ifdef ENABLE_MILLIS
+	#include "driver/timer.h"
 #endif
 
 #include "helper/battery.h"
@@ -75,6 +81,10 @@ void Main(void)
 
 	SYSTICK_Init();
 	BOARD_Init();
+
+#ifdef ENABLE_MILLIS
+	TIM0_INIT();
+#endif
 
 	boot_counter_10ms = 250;   // 2.5 sec
 
@@ -146,6 +156,13 @@ void Main(void)
 		gKeyReading1 = KEY_INVALID;
 		gDebounceCounter = 0;
 	}
+
+#ifdef ENABLE_CW_MODULATOR
+	// Check CW keyer inputs at startup - if stuck, fall back to handkey mode
+	if (!CW_CheckKeyerInputs(gEeprom.CW_KEY_INPUT)) {
+		gEeprom.CW_KEY_INPUT = CW_KEY_INPUT_HANDKEY;
+	}
+#endif
 
 	if (!gChargingWithTypeC && gBatteryDisplayLevel == 0)
 	{
