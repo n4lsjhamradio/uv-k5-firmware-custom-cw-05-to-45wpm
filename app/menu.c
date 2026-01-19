@@ -47,6 +47,20 @@
 	#define ARRAY_SIZE(x) (sizeof(x) / sizeof(x[0]))
 #endif
 
+#ifdef ENABLE_CW_MODULATOR
+	// CW key input menu selection (0-7) to bit-mapped value lookup
+	static const uint8_t CW_KEY_INPUT_menu_to_bitmap[8] = {
+		0x08, // 0: HANDKEY
+		0x18, // 1: HANDKEY_PORT
+		0x04, // 2: BUTTONS_NORMAL
+		0x05, // 3: BUTTONS_REVERSED
+		0x12, // 4: PORT_NORMAL
+		0x13, // 5: PORT_REVERSED
+		0x16, // 6: BOTH_NORMAL
+		0x17  // 7: BOTH_REVERSED
+	};
+#endif
+
 uint8_t gUnlockAllTxConfCnt;
 
 #ifdef ENABLE_F_CAL_MENU
@@ -386,7 +400,7 @@ int MENU_GetLimits(uint8_t menu_id, int32_t *pMin, int32_t *pMax)
 
 		case MENU_CW_KEY_INPUT:
 			*pMin = 0;
-			*pMax = 6;
+			*pMax = 7;
 			break;
 #endif
 		default:
@@ -845,10 +859,11 @@ void MENU_AcceptSetting(void)
 			break;
 
 		case MENU_CW_KEY_INPUT:
-			gEeprom.CW_KEY_INPUT = gSubMenuSelection;
+			// Map menu selection (0-7) to bit-mapped value
+			gEeprom.CW_KEY_INPUT = CW_KEY_INPUT_menu_to_bitmap[gSubMenuSelection];
 			CW_KeyerReconfigure();
 			break;
-	#endif
+#endif
 
 	}
 
@@ -1225,13 +1240,23 @@ void MENU_ShowCurrentSetting(void)
 			gSubMenuSelection = gEeprom.CW_KEYER_MODE;
 			break;
 		case MENU_CW_KEY_INPUT:
-			gSubMenuSelection = gEeprom.CW_KEY_INPUT;
-			break;
-	#endif
-
-		default:
-			return;
+		// Map bit-mapped value back to menu selection (0-7) by searching array
+		{
+			uint8_t val = gEeprom.CW_KEY_INPUT;
+			gSubMenuSelection = 0;  // Default to HANDKEY if not found
+			for (int i = 0; i < 8; i++) {
+				if (CW_KEY_INPUT_menu_to_bitmap[i] == val) {
+					gSubMenuSelection = i;
+					break;
+				}
+			}
 		}
+		break;
+#endif
+
+	default:
+		return;
+	}
 }
 
 static void MENU_Key_0_to_9(KEY_Code_t Key, bool bKeyPressed, bool bKeyHeld)
