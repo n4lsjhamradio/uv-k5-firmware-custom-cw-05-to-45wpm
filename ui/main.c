@@ -679,8 +679,10 @@ void UI_DisplayMain(void)
 
 		if (vfoInfo->CHANNEL_BANDWIDTH == BANDWIDTH_NARROW)
 			UI_PrintStringSmallNormal("N", LCD_WIDTH + 70, 0, line + 1);
+#ifdef ENABLE_EXTRA_FILTER
 		if (vfoInfo->CHANNEL_BANDWIDTH == BANDWIDTH_TIGHT)
 			UI_PrintStringSmallNormal("t", LCD_WIDTH + 70, 0, line + 1);
+#endif
 
 #ifdef ENABLE_DTMF_CALLING
 		// show the DTMF decoding symbol

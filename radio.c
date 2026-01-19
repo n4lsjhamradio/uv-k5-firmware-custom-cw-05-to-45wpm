@@ -23,6 +23,9 @@
 #ifdef ENABLE_FMRADIO
 	#include "app/fm.h"
 #endif
+#ifdef ENABLE_CW_MODULATOR
+	#include "app/app.h"
+#endif
 #include "audio.h"
 #include "bsp/dp32g030/gpio.h"
 #include "dcs.h"
@@ -37,6 +40,7 @@
 #include "radio.h"
 #include "settings.h"
 #include "ui/menu.h"
+
 
 VFO_Info_t    *gTxVfo;
 VFO_Info_t    *gRxVfo;
@@ -299,7 +303,11 @@ void RADIO_ConfigureChannel(const unsigned int VFO, const unsigned int configure
 		{
 			const uint8_t d4 = data[4];
 			pVfo->FrequencyReverse  = !!((d4 >> 0) & 1u);
-			pVfo->CHANNEL_BANDWIDTH = !!((d4 >> 1) & 1u);
+			#ifdef ENABLE_EXTRA_FILTER
+				pVfo->CHANNEL_BANDWIDTH =   ((d4 >> 5) & 3u);
+			#else
+				pVfo->CHANNEL_BANDWIDTH = !!((d4 >> 1) & 1u);
+			#endif
 			pVfo->OUTPUT_POWER      =   ((d4 >> 2) & 3u);
 			pVfo->BUSY_CHANNEL_LOCK = !!((d4 >> 4) & 1u);
 		}
@@ -536,6 +544,7 @@ void RADIO_SelectVfos(void)
 	if(gTxVfo->Modulation==MODULATION_CW)
 	{
 		CW_KeyerReconfigure();
+		gMonitor = true;
 	}
 #endif
 
@@ -598,7 +607,7 @@ void RADIO_SetupRegisters(bool switchToForeground)
 	#else
 		Frequency = gRxVfo->pRX->Frequency
 	#if ENABLE_CW_MODULATOR
-		- (gTxVfo->Modulation == MODULATION_CW ? 70 : 0) // CW BFO offset (10s of hz)
+		- (gTxVfo->Modulation == MODULATION_CW ? (45 + (5 * gEeprom.CW_TONE_FREQUENCY)) : 0) // CW BFO offset (10s of hz)
 	#endif
 	;
 	#endif
@@ -728,6 +737,12 @@ void RADIO_SetupRegisters(bool switchToForeground)
 
 	FUNCTION_Init();
 
+#ifdef ENABLE_CW_MODULATOR
+	if (gRxVfo->Modulation == MODULATION_CW)
+	{
+		APP_StartListening(FUNCTION_MONITOR);
+	}
+#endif
 	if (switchToForeground)
 		FUNCTION_Select(FUNCTION_FOREGROUND);
 }
@@ -782,9 +797,9 @@ void RADIO_SetTxParameters(void)
 	BK4819_FilterBandwidth_t Bandwidth = gCurrentVfo->CHANNEL_BANDWIDTH;
 
 	#ifdef ENABLE_CW_MODULATOR
-	if(gTxVfo->Modulation != MODULATION_CW || gEeprom.CW_SIDETONE_LEVEL == 0)
+	if((gTxVfo->Modulation != MODULATION_CW) || (gEeprom.CW_SIDETONE_LEVEL == 0))
 	#endif
-	AUDIO_AudioPathOff();
+		AUDIO_AudioPathOff();
 
 	gEnableSpeaker = false;
 
@@ -808,12 +823,11 @@ void RADIO_SetTxParameters(void)
 				BK4819_SetFilterBandwidth(Bandwidth, false);
 			#endif
 			break;
+		#ifdef ENABLE_EXTRA_FILTER
 			case BK4819_FILTER_BW_TIGHT:
 				BK4819_SetFilterBandwidth(BK4819_FILTER_BW_TIGHT, false);
 				break;
-	}
-
-	BK4819_SetFrequency(gCurrentVfo->pTX->Frequency);
+		#endif
 
 	// TX compressor
 	BK4819_SetCompander((gRxVfo->Modulation == MODULATION_FM && (gRxVfo->Compander == 1 || gRxVfo->Compander >= 3)) ? gRxVfo->Compander : 0);
