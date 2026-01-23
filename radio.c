@@ -40,8 +40,9 @@
 #include "radio.h"
 #include "settings.h"
 #include "ui/menu.h"
+#include "driver/uart.h"
 
-
+#include "external/printf/printf.h" // briand
 VFO_Info_t    *gTxVfo;
 VFO_Info_t    *gRxVfo;
 VFO_Info_t    *gCurrentVfo;
@@ -406,13 +407,10 @@ void RADIO_ConfigureSquelchAndOutputPower(VFO_Info_t *pInfo)
 
 	FREQUENCY_Band_t Band = FREQUENCY_GetBand(pInfo->pRX->Frequency);
 	uint16_t Base = (Band < BAND4_174MHz) ? 0x1E60 : 0x1E00;
-
-	// if(pInfo->Modulation == MODULATION_CW)
-	// 	LogUart("CW squelch set to off\n");
 		
 	if (gEeprom.SQUELCH_LEVEL == 0
 	#ifdef ENABLE_CW_MODULATOR
-//		|| pInfo->Modulation == MODULATION_CW   // briand - TOTO revisit squelch
+		|| pInfo->Modulation == MODULATION_CW   // briand - TOTO revisit squelch
 	#endif
 	)
 	{	// squelch == 0 (off)
@@ -540,14 +538,6 @@ void RADIO_SelectVfos(void)
 	gTxVfo = &gEeprom.VfoInfo[gEeprom.TX_VFO];
 	gRxVfo = &gEeprom.VfoInfo[gEeprom.RX_VFO];
 
-#ifdef ENABLE_CW_MODULATOR
-	if(gTxVfo->Modulation==MODULATION_CW)
-	{
-		CW_KeyerReconfigure();
-		gMonitor = true;
-	}
-#endif
-
 	RADIO_SelectCurrentVfo();
 }
 
@@ -568,7 +558,7 @@ void RADIO_SetupRegisters(bool switchToForeground)
 			[[fallthrough]];
 		case BK4819_FILTER_BW_WIDE:
 		case BK4819_FILTER_BW_NARROW:
-		case BK4819_FILTER_BW_TIGHT:
+		case BK4819_FILTER_BW_1p7K:
 			#ifdef ENABLE_AM_FIX
 //				BK4819_SetFilterBandwidth(Bandwidth, gRxVfo->Modulation == MODULATION_AM && gSetting_AM_fix);
 				BK4819_SetFilterBandwidth(Bandwidth, true);
@@ -607,7 +597,11 @@ void RADIO_SetupRegisters(bool switchToForeground)
 	#else
 		Frequency = gRxVfo->pRX->Frequency
 	#if ENABLE_CW_MODULATOR
-		- (gTxVfo->Modulation == MODULATION_CW ? (45 + (5 * gEeprom.CW_TONE_FREQUENCY)) : 0) // CW BFO offset (10s of hz)
+		- (gRxVfo->Modulation == MODULATION_CW ? gEeprom.CW_TONE_FREQUENCY : 0) // CW BFO offset
+		;
+			char buf[64];
+			sprintf_(buf, "RX freq: %d Hz, offset: %d Hz\r\n", gRxVfo->pRX->Frequency * 10, (10 * gEeprom.CW_TONE_FREQUENCY));
+			UART_Send(buf, strlen(buf));
 	#endif
 	;
 	#endif
@@ -736,13 +730,7 @@ void RADIO_SetupRegisters(bool switchToForeground)
 	BK4819_WriteRegister(BK4819_REG_3F, InterruptMask);
 
 	FUNCTION_Init();
-
-#ifdef ENABLE_CW_MODULATOR
-	if (gRxVfo->Modulation == MODULATION_CW)
-	{
-		APP_StartListening(FUNCTION_MONITOR);
-	}
-#endif
+	
 	if (switchToForeground)
 		FUNCTION_Select(FUNCTION_FOREGROUND);
 }
@@ -808,6 +796,7 @@ void RADIO_SetTxParameters(void)
 	#ifdef ENABLE_CW_MODULATOR
 	RADIO_SetModulation(gTxVfo->Modulation);
 	#endif
+	
 
 	switch (Bandwidth)
 	{
@@ -823,11 +812,14 @@ void RADIO_SetTxParameters(void)
 				BK4819_SetFilterBandwidth(Bandwidth, false);
 			#endif
 			break;
-		#ifdef ENABLE_EXTRA_FILTER
-			case BK4819_FILTER_BW_TIGHT:
-				BK4819_SetFilterBandwidth(BK4819_FILTER_BW_TIGHT, false);
-				break;
-		#endif
+	#ifdef ENABLE_EXTRA_FILTER
+		case BK4819_FILTER_BW_1p7K:
+			BK4819_SetFilterBandwidth(BK4819_FILTER_BW_1p7K, false);
+			break;
+	#endif
+	}	
+
+	BK4819_SetFrequency(gCurrentVfo->pTX->Frequency);
 
 	// TX compressor
 	BK4819_SetCompander((gRxVfo->Modulation == MODULATION_FM && (gRxVfo->Compander == 1 || gRxVfo->Compander >= 3)) ? gRxVfo->Compander : 0);
@@ -1123,7 +1115,7 @@ void RADIO_CW_BeginResume(void)
 	BK4819_EnableTXLink();
 
 	// Set local AF sidetone freq in Hz
-	BK4819_SetScrambleFrequencyControlWord(500+(gEeprom.CW_TONE_FREQUENCY*10));
+	BK4819_SetScrambleFrequencyControlWord(gEeprom.CW_TONE_FREQUENCY * 10);
 
 	// Turn on the red LED
 	BK4819_ToggleGpioOut(BK4819_GPIO5_PIN1_RED, true);

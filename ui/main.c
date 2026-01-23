@@ -678,10 +678,12 @@ void UI_DisplayMain(void)
 			UI_PrintStringSmallNormal("R", LCD_WIDTH + 62, 0, line + 1);
 
 		if (vfoInfo->CHANNEL_BANDWIDTH == BANDWIDTH_NARROW)
-			UI_PrintStringSmallNormal("N", LCD_WIDTH + 70, 0, line + 1);
+			UI_PrintStringSmallNormal("N", LCD_WIDTH + 70, 0, line + 1);		
+		else if (vfoInfo->CHANNEL_BANDWIDTH == BANDWIDTH_6K)
+			UI_PrintStringSmallNormal("6k", LCD_WIDTH + 70, 0, line + 1);
 #ifdef ENABLE_EXTRA_FILTER
-		if (vfoInfo->CHANNEL_BANDWIDTH == BANDWIDTH_TIGHT)
-			UI_PrintStringSmallNormal("t", LCD_WIDTH + 70, 0, line + 1);
+		else if (vfoInfo->CHANNEL_BANDWIDTH == BANDWIDTH_1p7K)
+			UI_PrintStringSmallNormal("1.7k", LCD_WIDTH + 70, 0, line + 1);
 #endif
 
 #ifdef ENABLE_DTMF_CALLING
