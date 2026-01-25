@@ -545,7 +545,10 @@ void RADIO_SetupRegisters(bool switchToForeground)
 {
 	BK4819_FilterBandwidth_t Bandwidth = gRxVfo->CHANNEL_BANDWIDTH;
 
-	AUDIO_AudioPathOff();
+#ifdef ENABLE_CW_MODULATOR
+	if (gRxVfo->Modulation == MODULATION_CW)
+		AUDIO_AudioPathOff();
+#endif
 
 	gEnableSpeaker = false;
 
@@ -730,7 +733,7 @@ void RADIO_SetupRegisters(bool switchToForeground)
 	BK4819_WriteRegister(BK4819_REG_3F, InterruptMask);
 
 	FUNCTION_Init();
-	
+
 	if (switchToForeground)
 		FUNCTION_Select(FUNCTION_FOREGROUND);
 }
