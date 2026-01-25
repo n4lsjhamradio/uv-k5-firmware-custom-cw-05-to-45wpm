@@ -917,30 +917,26 @@ void RADIO_SetModulation(ModulationMode_t modulation)
 
 void RADIO_SetupAGC(bool listeningAM, bool disable)
 {
-	static uint8_t lastSettings;
-	uint8_t newSettings = (listeningAM << 1) | (disable << 1);
+	static uint8_t lastSettings = 0xff; // force update first time
+	uint8_t newSettings = (listeningAM << 1) | disable;
 	if(lastSettings == newSettings)
 		return;
 	lastSettings = newSettings;
 
-
-	if(!listeningAM) { // if not actively listening AM we don't need any AM specific regulation
-		BK4819_SetAGC(!disable);
-		BK4819_InitAGC(false);
-	}
-	else {
 #ifdef ENABLE_AM_FIX
-		if(gSetting_AM_fix) { // if AM fix active lock AGC so AM-fix can do it's job
-			BK4819_SetAGC(0);
-			AM_fix_enable(!disable);
-		}
-		else
+    // AM fix mode: disable AGC, let AM_fix handle gain control
+    if(listeningAM && gSetting_AM_fix) {
+        BK4819_SetAGC(0);
+        AM_fix_enable(!disable);
+        if(!disable) // briand debug
+            UART_Send("AM fix enabled\r\n", 16);
+        return;
+    }
 #endif
-		{
-			BK4819_SetAGC(!disable);
-			BK4819_InitAGC(true);
-		}
-	}
+
+    // Standard AGC mode (FM or AM without fix)
+    BK4819_SetAGC(!disable);
+    BK4819_InitAGC(listeningAM);
 }
 
 void RADIO_SetVfoState(VfoState_t State)
