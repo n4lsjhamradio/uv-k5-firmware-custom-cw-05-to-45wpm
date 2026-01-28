@@ -20,6 +20,9 @@
 	#include "ARMCM0.h"
 #endif
 #include "app/cwkeyer.h"
+#ifdef ENABLE_CW_MODULATOR
+	#include "app/cwmacro.h"
+#endif
 #include "app/dtmf.h"
 #include "app/generic.h"
 #include "app/menu.h"
@@ -66,6 +69,7 @@ uint8_t gUnlockAllTxConfCnt;
 
 #ifdef ENABLE_CW_MODULATOR
 bool gCwKeyInputCheckFailed = false;
+bool gCwNoKeyerError = false;
 #endif
 
 #ifdef ENABLE_F_CAL_MENU
@@ -406,6 +410,12 @@ int MENU_GetLimits(uint8_t menu_id, int32_t *pMin, int32_t *pMax)
 		case MENU_CW_KEY_INPUT:
 			*pMin = 0;
 			*pMax = 7;
+			break;
+
+		case MENU_CW_MSG1:
+		case MENU_CW_MSG2:
+			*pMin = 0;
+			*pMax = 1;  // 0 = show macro, 1 = record new
 			break;
 #endif
 		default:
@@ -883,6 +893,25 @@ void MENU_AcceptSetting(void)
 				CW_KeyerReconfigure();
 			}
 			break;
+
+		case MENU_CW_MSG1:
+		case MENU_CW_MSG2:
+			// If gSubMenuSelection == 1, user selected "record new"
+			if (gSubMenuSelection == 1) {
+				// Check if we're in CW mode
+				if (gTxVfo->Modulation != MODULATION_CW) {
+					// Not in CW mode - can't use keyer for recording
+					gCwNoKeyerError = true;
+					gRequestDisplayScreen = DISPLAY_MENU;
+					return;  // Don't enter recording mode
+				}
+				// Enter recording mode
+				gCwNoKeyerError = false;
+				uint8_t macroIdx = (UI_MENU_GetCurrentMenuId() == MENU_CW_MSG1) ? 0 : 1;
+				CW_StartRecording(macroIdx);
+				edit_index = 0;  // Use edit_index >= 0 to signal we're in recording mode
+			}
+			break;
 #endif
 
 	}
@@ -1272,6 +1301,11 @@ void MENU_ShowCurrentSetting(void)
 			}
 		}
 		break;
+
+		case MENU_CW_MSG1:
+		case MENU_CW_MSG2:
+			gSubMenuSelection = 0;  // Default to showing current macro
+			break;
 #endif
 
 	default:
@@ -1441,6 +1475,17 @@ static void MENU_Key_EXIT(bool bKeyPressed, bool bKeyHeld)
 
 	gBeepToPlay = BEEP_1KHZ_60MS_OPTIONAL;
 
+#ifdef ENABLE_CW_MODULATOR
+	// Handle exiting CW macro recording mode
+	if (gCW_Recording) {
+		CW_StopRecording();
+		edit_index = -1;
+		gIsInSubMenu = false;
+		gRequestDisplayScreen = DISPLAY_MENU;
+		return;
+	}
+#endif
+
 	if (!gCssBackgroundScan)
 	{
 		/* Backlight related menus set full brightness. Set it back to the configured value,
@@ -1457,6 +1502,7 @@ static void MENU_Key_EXIT(bool bKeyPressed, bool bKeyHeld)
 				gFlagRefreshSetting = true;
 #ifdef ENABLE_CW_MODULATOR
             	gCwKeyInputCheckFailed = false;
+            	gCwNoKeyerError = false;
 #endif
 
 				#ifdef ENABLE_VOICE
@@ -1505,6 +1551,17 @@ static void MENU_Key_MENU(const bool bKeyPressed, const bool bKeyHeld)
 	gBeepToPlay           = BEEP_1KHZ_60MS_OPTIONAL;
 	gRequestDisplayScreen = DISPLAY_MENU;
 
+#ifdef ENABLE_CW_MODULATOR
+	// Handle completing CW macro recording mode
+	if (gCW_Recording) {
+		CW_StopRecording();
+		edit_index = -1;
+		gIsInSubMenu = false;
+		gSubMenuSelection = 0;  // Show the saved macro
+		return;
+	}
+#endif
+
 	if (!gIsInSubMenu)
 	{
 		#ifdef ENABLE_VOICE
@@ -1528,6 +1585,7 @@ static void MENU_Key_MENU(const bool bKeyPressed, const bool bKeyHeld)
 		gIsInSubMenu        = true;
 #ifdef ENABLE_CW_MODULATOR
 		gCwKeyInputCheckFailed = false;  // Clear error when entering submenu
+		gCwNoKeyerError = false;
 #endif
 
 //		if (UI_MENU_GetCurrentMenuId() != MENU_D_LIST)
@@ -1620,6 +1678,27 @@ static void MENU_Key_MENU(const bool bKeyPressed, const bool bKeyHeld)
 		}
 		else
 		{
+#ifdef ENABLE_CW_MODULATOR
+			// Special handling: if we're about to start CW macro recording, stay in submenu
+			if ((UI_MENU_GetCurrentMenuId() == MENU_CW_MSG1 || UI_MENU_GetCurrentMenuId() == MENU_CW_MSG2) 
+			    && gSubMenuSelection == 1)
+			{
+				// User is confirming "record new?" - check if we're in CW mode
+				if (gTxVfo->Modulation != MODULATION_CW) {
+					// Not in CW mode - can't use keyer for recording
+					gCwNoKeyerError = true;
+					gFlagAcceptSetting = false;  // Don't accept the setting
+					gIsInSubMenu = false;  // Exit submenu to show error
+					gRequestDisplayScreen = DISPLAY_MENU;
+					return;
+				}
+				// We're in CW mode - will start recording via MENU_AcceptSetting
+				// Stay in submenu for recording mode (don't set gIsInSubMenu = false)
+				gFlagAcceptSetting = true;
+				// Don't change gIsInSubMenu - keep it true for recording display
+				return;
+			}
+#endif
 			gFlagAcceptSetting = true;
 			gIsInSubMenu       = false;
 		}
@@ -1732,12 +1811,15 @@ static void MENU_Key_UP_DOWN(bool bKeyPressed, bool bKeyHeld, int8_t Direction)
 #ifdef ENABLE_CW_MODULATOR
 	if (gIsInSubMenu && UI_MENU_GetCurrentMenuId() == MENU_CW_KEY_INPUT)
 		gCwKeyInputCheckFailed = false;  // Clear error when changing value with UP/DOWN
+	if (gIsInSubMenu && (UI_MENU_GetCurrentMenuId() == MENU_CW_MSG1 || UI_MENU_GetCurrentMenuId() == MENU_CW_MSG2))
+		gCwNoKeyerError = false;  // Clear error when changing value with UP/DOWN
 #endif
 
 	if (!gIsInSubMenu) {
 		gMenuCursor = NUMBER_AddWithWraparound(gMenuCursor, -Direction, 0, gMenuListCount - 1);
 #ifdef ENABLE_CW_MODULATOR
 		gCwKeyInputCheckFailed = false;  // Clear error when changing menu items
+		gCwNoKeyerError = false;
 #endif
 		gFlagRefreshSetting = true;
 
