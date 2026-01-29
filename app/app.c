@@ -849,8 +849,6 @@ void APP_Update(void)
 		if (gCW_Recording) {
 			switch(action)
 			{
-				case CW_ACTION_CARRIER_HOLD:
-				break;
 				case CW_ACTION_CARRIER_ON:
 					AUDIO_AudioPathOn();
 					BK4819_SetAF(BK4819_AF_ALAM);	
@@ -865,6 +863,7 @@ void APP_Update(void)
 					BK4819_SetScrambleFrequencyControlWord(0);
 					RADIO_SetModulation(gRxVfo->Modulation);  // back to RX audio path
 				break;
+				
 				default:
 				break;
 			}
@@ -874,36 +873,33 @@ void APP_Update(void)
 		
 		switch(action)
 		{
-			case CW_ACTION_CARRIER_HOLD:
-				gPttIsPressed = true;
-				gDebounceCounter = 0;
-				gCW_SuspendCountdown_10ms = 0;
-				[[fallthrough]];
 			case CW_ACTION_CARRIER_ON:
 				gTxTimerCountdown_500ms = 0;
+				gPttIsPressed = true;
 
 				if(gCW_State == CW_INACTIVE)
 				{	
-					UART_LogSend("CW Start\n", 9);
-					// gUpdateDisplay = true;
-					// gUpdateStatus  = true;  // maybe?
-					// FUNCTION_Transmit_CW();
-					// gPttIsPressed = true;
-					// gCurrentFunction = FUNCTION_TRANSMIT;
+					UART_Send("CW Start\r\n", 10);
 					RADIO_PrepareTX();
 				}
 				else
 				{
-					UART_LogSend("CW Resume\n", 10);
+					UART_Send("CW Resume\r\n", 11);
 					RADIO_CW_BeginResume();
 				}
 			break;
 
 			case CW_ACTION_CARRIER_OFF:
-
-				UART_LogSend("CW Suspend\n", 11);
+				UART_Send("CW Suspend\r\n", 12);
 				RADIO_CW_Suspend();
 				gCW_SuspendCountdown_10ms = 0;
+			break;
+
+			case CW_ACTION_CARRIER_HOLD:
+				gPttIsPressed = true;
+				//gDebounceCounter = 0;
+				gCW_SuspendCountdown_10ms = 0;
+				gTxTimerCountdown_500ms = 0;
 			break;
 
 			case CW_ACTION_NONE:
@@ -912,7 +908,7 @@ void APP_Update(void)
 				// paranoia: if transmitting but the keyer didn't request any action, suspend it
 				if(gCW_State == CW_TRANSMITTING)
 				{
-					UART_LogSend("!!! CW Auto Suspend\n", 20);
+					UART_Send("!!! CW Auto Suspend\r\n", 21);
 					RADIO_CW_Suspend();
 					gCW_SuspendCountdown_10ms = 0;
 				}
@@ -1118,29 +1114,6 @@ static void CheckKeys(void)
 			}
 #endif
 
-		#ifdef NOT_CW  //ENABLE_CW_MODULATOR
-			if(gCW_State != CW_INACTIVE)
-			{
-				gPttDebounceCounter = 0; // keep ptt "pressed" while doing CW transmission
-				// While in CW, transition to suspend on release
-				if (gCW_State == CW_TRANSMITTING)
-				{
-					RADIO_CW_Suspend();
-					gCW_State = CW_SUSPENDED;
-					gCW_SuspendCountdown_10ms = 0;
-					return;
-				}
-				else if (gCW_State == CW_SUSPENDED)
-				{
-					// in CW suspend: count duration and end TX if threshold exceeded
-					if (++gCW_SuspendCountdown_10ms >= cw_suspend_count_10ms) {
-						gCW_State = CW_INACTIVE;
-						gPttDebounceCounter = 3; // skip debounce and fall through
-					}
-				}
-			}
-		#endif
-
 			if (++gPttDebounceCounter >= 3 || SerialConfigInProgress())	    // 30ms
 			{	// stop transmitting
 				ProcessKey(KEY_PTT, false, false);
@@ -1152,16 +1125,6 @@ static void CheckKeys(void)
 		else
 		{
 			gPttDebounceCounter = 0;
-		#ifdef NOT_CW  //ENABLE_CW_MODULATOR -- TODO briand fix
-			// // If we're suspended and PTT is pressed again, resume immediately
-			// if (gCW_State == CW_SUSPENDED) {
-			// 	gCW_State = CW_TRANSMITTING;
-			// 	boot_counter_10ms   = 0;
-			// 	gCW_SuspendCountdown_10ms = 0;
-			// 	RADIO_CW_BeginResume();
-			// 	return;
-			// }
-		#endif
 		}
 	}
 	else if (!GPIO_CheckBit(&GPIOC->DATA, GPIOC_PIN_PTT) && !SerialConfigInProgress())
