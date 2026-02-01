@@ -317,6 +317,9 @@ extern volatile bool         gNextTimeslice40ms;
 #endif
 extern volatile bool         gFlagTailToneEliminationComplete;
 extern volatile uint8_t      gVFOStateResumeCountdown_500ms;
+#ifdef ENABLE_CW_MODULATOR
+extern volatile bool         gCW_PlayIndicatorOn;
+#endif
 #ifdef ENABLE_FMRADIO
 	extern volatile bool     gScheduleFM;
 #endif

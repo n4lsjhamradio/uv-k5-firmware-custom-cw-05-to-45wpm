@@ -41,7 +41,7 @@ extern const uint8_t BITMAP_VFO_NotDefault[8];
 
 extern const uint8_t BITMAP_ScanList1[6];
 extern const uint8_t BITMAP_ScanList2[6];
-
+extern const uint8_t BITMAP_Play[8];  /* small right-facing triangle (8x8) */
 extern const uint8_t BITMAP_compand[6];
 
 #ifndef ENABLE_CUSTOM_MENU_LAYOUT
