@@ -20,11 +20,17 @@
 
 #include <stdint.h>
 
+#ifdef ENABLE_UART
 extern uint8_t UART_DMA_Buffer[256];
 
 void UART_Init(void);
 void UART_Send(const void *pBuffer, uint32_t Size);
 void UART_LogSend(const void *pBuffer, uint32_t Size);
-
+#else
+extern uint8_t UART_DMA_Buffer[0];
+#define UART_Init()                  do { } while(0)
+#define UART_Send(pBuffer, Size)      do { } while(0)
+#define UART_LogSend(pBuffer, Size)   do { } while(0)
+#endif
 #endif
 

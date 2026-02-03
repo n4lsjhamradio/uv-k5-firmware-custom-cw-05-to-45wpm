@@ -86,6 +86,8 @@ static void processFKeyFunction(const KEY_Code_t Key, const bool beep)
 		case KEY_0:
 			#ifdef ENABLE_FMRADIO
 				ACTION_FM();
+			#else
+				ACTION_SwitchDemodul();
 			#endif
 			break;
 
@@ -639,7 +641,12 @@ static void MAIN_Key_UP_DOWN(bool bKeyPressed, bool bKeyHeld, int8_t Direction)
 					return;
 				}
 				gTxVfo->freq_config_RX.Frequency = frequency;
-				BK4819_SetFrequency(frequency);
+				BK4819_SetFrequency(frequency
+				#ifdef ENABLE_CW_MODULATOR
+					- (gTxVfo->Modulation == MODULATION_CW)? 
+						(gEeprom.CW_TONE_FREQUENCY * 10) : 0 // CW BFO offset (10s of hz)
+				#endif
+				);
 				BK4819_RX_TurnOn();
 				gRequestSaveChannel = 1;
 				return;

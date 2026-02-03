@@ -228,6 +228,16 @@ void SETTINGS_InitEEPROM(void)
 		gEeprom.SCANLIST_PRIORITY_CH2[i] =  Data[j + 2];
 	}
 
+#ifdef ENABLE_CW_MODULATOR
+	// 0F20..0F22
+	EEPROM_ReadBuffer(0x0F20, Data, 3);
+	gEeprom.CW_TONE_FREQUENCY = Data[0] == 0xff ? 60 : 45 + (Data[0] & 0xf) * 5;  // Same as gMenuSelection: 50 Hz steps from 450, default 600
+	gEeprom.CW_SIDETONE_LEVEL = Data[0] == 0xff ? 4*21 : ((Data[0] >> 4) & 0x07) * 21;  // levels 0-6 scaled by 21 (max 6*21=126), default 4*21=105
+	gEeprom.CW_KEYER_MODE     = (Data[1] & 0x80) ? CW_IAMBIC_MODE_B : CW_IAMBIC_MODE_A;  // bit 7: 0=A, 1=B
+	gEeprom.CW_KEY_WPM        = ((Data[1] & 0x3f) < 31 && (Data[1] & 0x3f) >= 10) ? Data[1] & 0x3f : 18;  // bits 0-5, valid range 10-30, default 18 WPM
+	gEeprom.CW_KEY_INPUT      = ((Data[2] & 0x1F) <= 0x18) ? (Data[2] & 0x1F) : CW_KEY_INPUT_HANDKEY;  // bits 0-4, range 0-0x18 (24), default HANDKEY
+#endif
+
 	// 0F40..0F47
 	EEPROM_ReadBuffer(0x0F40, Data, 8);
 	gSetting_F_LOCK            = (Data[0] < F_LOCK_LEN) ? Data[0] : F_LOCK_DEF;
@@ -570,6 +580,16 @@ void SETTINGS_SaveSettings(void)
 	State[7] = 0xFF;
 	EEPROM_WriteBuffer(0x0F18, State);
 
+	memset(State, 0xff, sizeof(State));
+	{
+		// Convert sidetone level back to 0-6 range for storage
+		uint8_t level = gEeprom.CW_SIDETONE_LEVEL / 21;
+		State[0] = (gEeprom.CW_TONE_FREQUENCY - 45) / 5 | ((level & 0x07) << 4);
+	}
+	State[1] = (gEeprom.CW_KEYER_MODE << 7) | (gEeprom.CW_KEY_WPM & 0x3F);  // mode in bit 7 (0=A, 1=B), WPM in bits 0-5
+	State[2] = gEeprom.CW_KEY_INPUT & 0x1F;  // key input in bits 0-4 (supports values 0-0x18)
+	EEPROM_WriteBuffer(0x0F20, State);
+
 	memset(State, 0xFF, sizeof(State));
 	State[0]  = gSetting_F_LOCK;
 	State[1]  = gSetting_350TX;
@@ -625,7 +645,11 @@ void SETTINGS_SaveChannel(uint8_t Channel, uint8_t VFO, const VFO_Info_t *pVFO, 
 		State._8[4] = 0
 			| (pVFO->BUSY_CHANNEL_LOCK << 4)
 			| (pVFO->OUTPUT_POWER      << 2)
-			| (pVFO->CHANNEL_BANDWIDTH << 1)
+			#ifdef ENABLE_EXTRA_FILTER
+				| (pVFO->CHANNEL_BANDWIDTH << 5)
+			#else
+				| (pVFO->CHANNEL_BANDWIDTH << 1)
+			#endif
 			| (pVFO->FrequencyReverse  << 0);
 		State._8[5] = ((pVFO->DTMF_PTT_ID_TX_MODE & 7u) << 1)
 #ifdef ENABLE_DTMF_CALLING
@@ -759,6 +783,9 @@ buf[1] = 0
 #endif
 #ifdef ENABLE_SPECTRUM
     | (1 << 5)
+#endif
+#ifdef ENABLE_CW_MODULATOR
+	| (1 << 6)
 #endif
 ;
 	EEPROM_WriteBuffer(0x1FF0, buf);

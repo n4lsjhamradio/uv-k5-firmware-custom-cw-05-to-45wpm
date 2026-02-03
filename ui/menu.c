@@ -19,6 +19,9 @@
 
 #include "../app/dtmf.h"
 #include "../app/menu.h"
+#ifdef ENABLE_CW_MODULATOR
+	#include "../app/cwmacro.h"
+#endif
 #include "../bitmaps.h"
 #include "../board.h"
 #include "../dcs.h"
@@ -48,7 +51,7 @@ const t_menu_item MenuList[] =
 	{"TxCTCS", VOICE_ID_CTCSS,                         MENU_T_CTCS        }, // was "T_CTCS"
 	{"TxODir", VOICE_ID_TX_OFFSET_FREQUENCY_DIRECTION, MENU_SFT_D         }, // was "SFT_D"
 	{"TxOffs", VOICE_ID_TX_OFFSET_FREQUENCY,           MENU_OFFSET        }, // was "OFFSET"
-	{"W/N",    VOICE_ID_CHANNEL_BANDWIDTH,             MENU_W_N           },
+	{"Filter",    VOICE_ID_CHANNEL_BANDWIDTH,             MENU_W_N           },
 	{"Scramb", VOICE_ID_SCRAMBLER_ON,                  MENU_SCR           }, // was "SCR"
 	{"BusyCL", VOICE_ID_BUSY_LOCKOUT,                  MENU_BCL           }, // was "BCL"
 	{"Compnd", VOICE_ID_INVALID,                       MENU_COMPAND       },
@@ -123,6 +126,15 @@ const t_menu_item MenuList[] =
 	{"BatVol", VOICE_ID_INVALID,                       MENU_VOL           }, // was "VOL"
 	{"RxMode", VOICE_ID_DUAL_STANDBY,                  MENU_TDR           },
 	{"Sql",    VOICE_ID_SQUELCH,                       MENU_SQL           },
+#ifdef ENABLE_CW_MODULATOR
+	{"CWfreq", VOICE_ID_INVALID,                       MENU_CW_FREQ       },
+	{"CWvol", VOICE_ID_INVALID,                      MENU_CW_SIDETONE_LEVEL},
+	{"CWkmod", VOICE_ID_INVALID,                      MENU_CW_KEYER_MODE },
+	{"CWwpm", VOICE_ID_INVALID,                       MENU_CW_KEY_WPM	  },
+	{"CWkin", VOICE_ID_INVALID,                        MENU_CW_KEY_INPUT  },
+	{"CWmsg1", VOICE_ID_INVALID,                        MENU_CW_MSG1       },
+	{"CWmsg2", VOICE_ID_INVALID,                        MENU_CW_MSG2       },
+#endif
 
 	// hidden menu items from here on
 	// enabled if pressing both the PTT and upper side button at power-on
@@ -160,8 +172,12 @@ const char gSubMenu_SFT_D[][4] =
 
 const char gSubMenu_W_N[][7] =
 {
-	"WIDE",
-	"NARROW"
+	"25k FM",
+	"12k FM",
+	"N 6k",
+#ifdef ENABLE_EXTRA_FILTER
+	"N 1.7k"
+#endif
 };
 
 const char gSubMenu_OFF_ON[][4] =
@@ -358,9 +374,13 @@ const t_sidefunction gSubMenu_SIDEFUNCTIONS[] =
 	{"LOCK\nKEYPAD",	ACTION_OPT_KEYLOCK},
 	{"SWITCH\nVFO",		ACTION_OPT_A_B},
 	{"VFO/MR",			ACTION_OPT_VFO_MR},
-	{"SWITCH\nDEMODUL",	ACTION_OPT_SWITCH_DEMODUL},
+	{"SWITCH\nDEMOD",	ACTION_OPT_SWITCH_DEMODUL},
 #ifdef ENABLE_BLMIN_TMP_OFF
 	{"BLMIN\nTMP OFF",  ACTION_OPT_BLMIN_TMP_OFF}, 		//BackLight Minimum Temporay OFF
+#endif
+#ifdef ENABLE_CW_MODULATOR
+	{"PLAY\nCW MSG1", ACTION_OPT_PLAY_CWMSG1},
+	{"PLAY\nCW MSG2", ACTION_OPT_PLAY_CWMSG2},
 #endif
 #ifdef ENABLE_SPECTRUM
 	{"SPECTRUM",         ACTION_OPT_SPECTRUM}
@@ -368,6 +388,33 @@ const t_sidefunction gSubMenu_SIDEFUNCTIONS[] =
 };
 
 const uint8_t gSubMenu_SIDEFUNCTIONS_size = ARRAY_SIZE(gSubMenu_SIDEFUNCTIONS);
+
+#ifdef ENABLE_CW_MODULATOR
+const char* gSubMenu_CW_KEYER_MODE[] =
+{
+	"Mode\nA",
+	"Mode\nB"
+};
+
+const char* gSubMenu_CW_KEY_INPUT[] =
+{
+	"PTT\nHandKey",
+	"PTT+port\nHandKey",
+	"PTT dah\nSD1 dit",
+	"PTT dit\nSD1 dah",
+	"PTT+tip\ndah\nring\ndit",
+	"PTT+tip\ndit\nring\ndah",
+	"PTT+tip\ndah\nSD1+rng\ndit",
+	"PTT+tip\ndit\nSD1+rng\ndah"
+};
+
+const char* gSubMenu_CW_MSG[] =
+{
+	"Record\nnew?",
+	"Play"
+};
+
+#endif
 
 bool    gIsInSubMenu;
 uint8_t gMenuCursor;
@@ -842,6 +889,74 @@ void UI_DisplayMenu(void)
 			strcpy(String, gSubMenu_SIDEFUNCTIONS[gSubMenuSelection].name);
 			break;
 
+#ifdef ENABLE_CW_MODULATOR
+		case MENU_CW_FREQ:
+			sprintf(String, "%d Hz", 450 + gSubMenuSelection * 50);
+			break;
+
+		case MENU_CW_SIDETONE_LEVEL:
+			if (gSubMenuSelection == 0)
+				strcpy(String, "OFF");
+			else
+				sprintf(String, "%u", gSubMenuSelection);
+			break;
+
+		case MENU_CW_KEYER_MODE:
+			strcpy(String, gSubMenu_CW_KEYER_MODE[gSubMenuSelection]);
+			break;
+
+		case MENU_CW_KEY_WPM:
+			sprintf(String, "%d WPM", gSubMenuSelection);
+			break;
+
+		case MENU_CW_KEY_INPUT:
+			strcpy(String, gSubMenu_CW_KEY_INPUT[gSubMenuSelection]);
+			break;
+
+		case MENU_CW_MSG1:
+		case MENU_CW_MSG2:
+			{
+				uint8_t macroIdx = (UI_MENU_GetCurrentMenuId() == MENU_CW_MSG1) ? 0 : 1;
+				uint8_t len = CW_GetMacroLength(macroIdx);
+				
+				// Check if we're in recording mode
+				if (gIsInSubMenu && edit_index >= 0 && gCW_Recording) {
+					// Recording mode - show accumulated characters
+					char display[16];
+					uint8_t cursor_pos = CW_GetRecordingDisplay(display, sizeof(display));
+					
+					// Display the recording text on line 2
+					UI_PrintString(display, menu_item_x1, menu_item_x2, 2, 8);
+					
+					// Show cursor under current position (cursor_pos is the index in display string)
+					if (cursor_pos < strlen(display)) {
+						char cursor[2] = "^";
+						UI_PrintString(cursor, menu_item_x1 + (cursor_pos * 8), 0, 4, 8);
+					}
+					
+					// Show recording count on line 5 (not 6 which gets cut off)
+					if (gCW_RecordLength >= CW_MACRO_MAX_LEN) {
+						sprintf(String, "FULL %u/%u", gCW_RecordLength, CW_MACRO_MAX_LEN);
+					} else {
+						sprintf(String, "REC %u/%u", gCW_RecordLength, CW_MACRO_MAX_LEN);
+					}
+					UI_PrintString(String, menu_item_x1, menu_item_x2, 5, 8);
+					
+					already_printed = true;
+				} else if (gSubMenuSelection == 0) {
+					// Show current macro (use 9 char width for 4 lines = 36 chars)
+					if (len == 0) {
+						strcpy(String, "empty");
+					} else {
+						CW_FormatMacroDisplay(macroIdx, String, 9);
+					}
+				} else {
+					// record/play
+					strcpy(String, gSubMenu_CW_MSG[gSubMenuSelection-1]);
+				}
+			}
+			break;
+#endif
 	}
 
 	if (!already_printed)
@@ -966,6 +1081,19 @@ void UI_DisplayMenu(void)
 		char *pPrintStr = (gAskForConfirmation == 1) ? "SURE?" : "WAIT!";
 		UI_PrintString(pPrintStr, menu_item_x1, menu_item_x2, 5, 8);
 	}
+
+#ifdef ENABLE_CW_MODULATOR
+	if (UI_MENU_GetCurrentMenuId() == MENU_CW_KEY_INPUT && gCwKeyInputCheckFailed)
+	{	// display error when CW key validation fails
+		UI_PrintString("KEY ERR", menu_item_x1, menu_item_x2, 5, 8);
+	}
+	
+	if ((UI_MENU_GetCurrentMenuId() == MENU_CW_MSG1 || UI_MENU_GetCurrentMenuId() == MENU_CW_MSG2) && gCwNoKeyerError)
+	{	// display error when trying to record without keyer enabled
+		UI_PrintString("no keyer!", menu_item_x1, menu_item_x2, 5, 8);
+	}
+	
+#endif
 
 	ST7565_BlitFullScreen();
 }

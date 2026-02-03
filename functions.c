@@ -20,6 +20,9 @@
 #if defined(ENABLE_FMRADIO)
 	#include "app/fm.h"
 #endif
+#ifdef ENABLE_CW_MODULATOR
+	#include "app/cwmacro.h"
+#endif
 #include "audio.h"
 #include "bsp/dp32g030/gpio.h"
 #include "dcs.h"
@@ -224,7 +227,43 @@ void FUNCTION_Transmit()
 	}
 }
 
+#ifdef ENABLE_CW_MODULATOR
 
+void FUNCTION_Transmit_CW()
+{
+	// Mark CW TX in progress and clear suspend counter
+	gCW_State = CW_TRANSMITTING;
+	gCW_SuspendCountdown_10ms = 0;
+	
+	gUpdateStatus = true;
+
+	GUI_DisplayScreen();
+	
+	// if DTMF is enabled when TX'ing, it changes the TX audio filtering !! .. 1of11
+	BK4819_DisableDTMF();
+
+	// removed all the DTMF calling code, not needed for CW
+
+	RADIO_SetTxParameters();
+
+	// turn the Green LED off
+	BK4819_ToggleGpioOut(BK4819_GPIO6_PIN2_GREEN, false);
+
+	BK4819_DisableScramble();
+	if (gSetting_backlight_on_tx_rx & BACKLIGHT_ON_TR_TX) {
+		BACKLIGHT_TurnOn();
+	}
+	
+	// Don't send AF to RF during CW
+	BK4819_EnterTxMute();	
+	BK4819_WriteRegister(BK4819_REG_70,
+		BK4819_REG_70_ENABLE_TONE1 |
+		(gEeprom.CW_SIDETONE_LEVEL << BK4819_REG_70_SHIFT_TONE1_TUNING_GAIN));
+	BK4819_SetAF(BK4819_AF_ALAM);
+
+	RADIO_CW_BeginResume();
+}
+#endif
 
 void FUNCTION_Select(FUNCTION_Type_t Function)
 {
@@ -249,7 +288,12 @@ void FUNCTION_Select(FUNCTION_Type_t Function)
 			return;
 
 		case FUNCTION_TRANSMIT:
-			FUNCTION_Transmit();
+				#ifdef ENABLE_CW_MODULATOR
+				if (gTxVfo->Modulation == MODULATION_CW)
+					FUNCTION_Transmit_CW();
+				else
+				#endif
+					FUNCTION_Transmit();
 			break;
 
 		case FUNCTION_MONITOR:
@@ -260,6 +304,11 @@ void FUNCTION_Select(FUNCTION_Type_t Function)
 		case FUNCTION_RECEIVE:
 		case FUNCTION_BAND_SCOPE:
 		default:
+		// briand TODO
+			// #ifdef ENABLE_CW_MODULATOR
+			// if (gRxVfo->Modulation == MODULATION_CW)
+			// 	gMonitor = true;
+			// #endif
 			break;
 	}
 

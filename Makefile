@@ -6,23 +6,23 @@
 # ---- STOCK QUANSHENG FERATURES ----
 ENABLE_UART                   ?= 1
 ENABLE_AIRCOPY                ?= 0
-ENABLE_FMRADIO                ?= 1
+ENABLE_FMRADIO                ?= 0
 ENABLE_NOAA                   ?= 0
 ENABLE_VOICE                  ?= 0
-ENABLE_VOX                    ?= 1
+ENABLE_VOX                    ?= 0
 ENABLE_ALARM                  ?= 0
 ENABLE_TX1750                 ?= 0
 ENABLE_PWRON_PASSWORD         ?= 0
-ENABLE_DTMF_CALLING           ?= 1
+ENABLE_DTMF_CALLING           ?= 0
 ENABLE_FLASHLIGHT             ?= 1
 
 # ---- CUSTOM MODS ----
 ENABLE_BIG_FREQ               ?= 1
-ENABLE_SMALL_BOLD             ?= 1
+ENABLE_SMALL_BOLD             ?= 0
 ENABLE_CUSTOM_MENU_LAYOUT     ?= 1
 ENABLE_KEEP_MEM_NAME          ?= 1
 ENABLE_WIDE_RX                ?= 1
-ENABLE_TX_WHEN_AM             ?= 0
+ENABLE_TX_WHEN_AM             ?= 1
 ENABLE_F_CAL_MENU             ?= 0
 ENABLE_CTCSS_TAIL_PHASE_SHIFT ?= 0
 ENABLE_BOOT_BEEPS             ?= 0
@@ -33,22 +33,25 @@ ENABLE_AM_FIX                 ?= 1
 ENABLE_SQUELCH_MORE_SENSITIVE ?= 1
 ENABLE_FASTER_CHANNEL_SCAN    ?= 1
 ENABLE_RSSI_BAR               ?= 1
-ENABLE_AUDIO_BAR              ?= 1
+ENABLE_AUDIO_BAR              ?= 0
 ENABLE_COPY_CHAN_TO_VFO       ?= 1
 ENABLE_SPECTRUM               ?= 1
 ENABLE_REDUCE_LOW_MID_TX_POWER?= 0
 ENABLE_BYP_RAW_DEMODULATORS   ?= 0
 ENABLE_BLMIN_TMP_OFF          ?= 0
 ENABLE_SCAN_RANGES            ?= 1
+ENABLE_CW_MODULATOR           ?= 1
+ENABLE_MILLIS                 ?= 1
+ENABLE_EXTRA_FILTER           ?= 1
 
 # ---- DEBUGGING ----
 ENABLE_AM_FIX_SHOW_DATA       ?= 0
 ENABLE_AGC_SHOW_DATA          ?= 0
-ENABLE_UART_RW_BK_REGS        ?= 0
+ENABLE_UART_RW_BK_REGS        ?= 1
 
 # ---- COMPILER/LINKER OPTIONS ----
 ENABLE_CLANG                  ?= 0
-ENABLE_SWD                    ?= 0
+ENABLE_SWD                    ?= 1
 ENABLE_OVERLAY                ?= 0
 ENABLE_LTO                    ?= 1
 
@@ -64,6 +67,17 @@ endif
 ifeq ($(ENABLE_LTO),1)
 	# can't have LTO and OVERLAY enabled at same time
 	ENABLE_OVERLAY := 0
+endif
+
+ifeq ($(ENABLE_CW_MODULATOR),1)
+	# Auto-enable extra filter when CW is enabled
+	ENABLE_EXTRA_FILTER := 1
+endif
+
+ifeq ($(ENABLE_CW_MODULATOR),1)
+ifeq ($(ENABLE_DTMF_CALLING),1)
+$(error ENABLE_CW_MODULATOR and ENABLE_DTMF_CALLING cannot both be enabled at the same time)
+endif
 endif
 
 BSP_DEFINITIONS := $(wildcard hardware/*/*.def)
@@ -106,7 +120,16 @@ OBJS += driver/systick.o
 ifeq ($(ENABLE_UART),1)
 	OBJS += driver/uart.o
 endif
-
+ifeq ($(ENABLE_CW_MODULATOR),1)
+	# CW modulator requires millis timer
+	ENABLE_MILLIS := 1
+    OBJS += app/cwkeyer.o
+    OBJS += app/cwhardware.o
+    OBJS += app/cwmacro.o
+endif
+ifeq ($(ENABLE_MILLIS),1)
+	OBJS += driver/timer.o
+endif
 # Main
 OBJS += app/action.o
 ifeq ($(ENABLE_AIRCOPY),1)
@@ -200,7 +223,7 @@ endif
 OBJCOPY = arm-none-eabi-objcopy
 SIZE = arm-none-eabi-size
 
-AUTHOR_STRING ?= EGZUMER
+AUTHOR_STRING ?= NR7Y
 # the user might not have/want git installed
 # can set own version string here (max 7 chars)
 ifneq (, $(shell $(WHERE) git))
@@ -214,7 +237,7 @@ endif
 ifeq (, $(VERSION_STRING))
 	VERSION_STRING := NOGIT
 endif
-#VERSION_STRING := 230930b
+VERSION_STRING := beta2
 
 
 ASFLAGS = -c -mcpu=cortex-m0
@@ -361,6 +384,15 @@ ifeq ($(ENABLE_BLMIN_TMP_OFF),1)
 endif
 ifeq ($(ENABLE_SCAN_RANGES),1)
 	CFLAGS  += -DENABLE_SCAN_RANGES
+endif
+ifeq ($(ENABLE_CW_MODULATOR),1)
+	CFLAGS  += -DENABLE_CW_MODULATOR
+endif
+ifeq ($(ENABLE_MILLIS),1)
+	CFLAGS  += -DENABLE_MILLIS
+endif
+ifeq ($(ENABLE_EXTRA_FILTER),1)
+	CFLAGS  += -DENABLE_EXTRA_FILTER
 endif
 ifeq ($(ENABLE_DTMF_CALLING),1)
 	CFLAGS  += -DENABLE_DTMF_CALLING

@@ -22,10 +22,17 @@
 #ifdef ENABLE_AM_FIX
 	#include "am_fix.h"
 #endif
+#ifdef ENABLE_CW_MODULATOR
+	#include "app/cwmacro.h"
+	#include "app/cwkeyer.h"
+	#include "driver/timer.h"
+	#include "bsp/dp32g030/timer.h"  /* for TIMERBASE0_LOW_CNT access */
+#endif
 #include "bitmaps.h"
 #include "board.h"
 #include "driver/bk4819.h"
 #include "driver/st7565.h"
+#include "driver/uart.h"
 #include "external/printf/printf.h"
 #include "functions.h"
 #include "helper/battery.h"
@@ -140,7 +147,7 @@ void UI_DisplayAudioBar(void)
 #if defined(ENABLE_ALARM) || defined(ENABLE_TX1750)
 		if (gAlarmState != ALARM_STATE_OFF)
 			return;
-#endif
+#endif	
 		const unsigned int voice_amp  = BK4819_GetVoiceAmplitudeOut();  // 15:0
 
 		// make non-linear to make more sensitive at low values
@@ -156,6 +163,40 @@ void UI_DisplayAudioBar(void)
 		if (gCurrentFunction == FUNCTION_TRANSMIT)
 			ST7565_BlitFullScreen();
 	}
+}
+#endif
+
+#ifdef ENABLE_CW_MODULATOR
+void DrawCWDecodeBar(void)
+{
+	const unsigned int line = 3;
+	uint8_t *p_line = gFrameBuffer[line];
+	char String[20];
+	
+	if (gScreenToDisplay != DISPLAY_MAIN)
+		return;  // screen is in use
+	
+	memset(p_line, 0, LCD_WIDTH);
+	
+	// Get the last 20 characters from display buffer
+	const unsigned int len = strlen(gCW_TX_Display);
+	const unsigned int idx = (len > 20) ? len - 20 : 0;
+
+	// Print the text shifted right so glyph can be placed at x=0; print text first
+	sprintf(String, "%s", gCW_TX_Display + idx);
+	UI_PrintStringSmallNormal(String, 10, 0, line);
+
+	// Draw glyph after text so it can't be clobbered (drawn independently of DecodeBar)
+	if (CW_IsMacroPlaybackActive() && (center_line == CENTER_LINE_NONE || center_line == CENTER_LINE_CW_DECODE)) {
+		if (gCW_PlayIndicatorOn) {
+			memcpy(p_line + 0, BITMAP_Play, sizeof(BITMAP_Play));
+		} else {
+			// clear the glyph area
+			memset(p_line + 0, 0, sizeof(BITMAP_Play));
+		}
+	}
+
+	ST7565_BlitLine(line);
 }
 #endif
 
@@ -678,7 +719,13 @@ void UI_DisplayMain(void)
 			UI_PrintStringSmallNormal("R", LCD_WIDTH + 62, 0, line + 1);
 
 		if (vfoInfo->CHANNEL_BANDWIDTH == BANDWIDTH_NARROW)
-			UI_PrintStringSmallNormal("N", LCD_WIDTH + 70, 0, line + 1);
+			UI_PrintStringSmallNormal("N", LCD_WIDTH + 70, 0, line + 1);		
+		else if (vfoInfo->CHANNEL_BANDWIDTH == BANDWIDTH_6K)
+			UI_PrintStringSmallNormal("6k", LCD_WIDTH + 70, 0, line + 1);
+#ifdef ENABLE_EXTRA_FILTER
+		else if (vfoInfo->CHANNEL_BANDWIDTH == BANDWIDTH_1p7K)
+			UI_PrintStringSmallNormal("1.7k", LCD_WIDTH + 70, 0, line + 1);
+#endif
 
 #ifdef ENABLE_DTMF_CALLING
 		// show the DTMF decoding symbol
@@ -702,9 +749,22 @@ void UI_DisplayMain(void)
 		const bool rx = FUNCTION_IsRx();
 
 #ifdef ENABLE_AUDIO_BAR
-		if (gSetting_mic_bar && gCurrentFunction == FUNCTION_TRANSMIT) {
+		if (gSetting_mic_bar && gCurrentFunction == FUNCTION_TRANSMIT 
+#ifdef ENABLE_CW_MODULATOR
+			&& gCurrentVfo->Modulation != MODULATION_CW
+#endif
+		) {	
 			center_line = CENTER_LINE_AUDIO_BAR;
 			UI_DisplayAudioBar();
+		}
+		else
+#endif
+
+#ifdef ENABLE_CW_MODULATOR
+		if ((gCurrentFunction == FUNCTION_TRANSMIT || gCW_TxDisplayHoldoff_10ms > 0) && gCurrentVfo->Modulation == MODULATION_CW && gCW_TX_Display[0] != 0)
+		{	// show CW characters being transmitted (persists 1 sec after TX ends)
+			center_line = CENTER_LINE_CW_DECODE;
+			DrawCWDecodeBar();
 		}
 		else
 #endif

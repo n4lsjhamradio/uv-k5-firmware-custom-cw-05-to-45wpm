@@ -549,7 +549,7 @@ static void ToggleModulation() {
 }
 
 static void ToggleListeningBW() {
-  if (settings.listenBw == BK4819_FILTER_BW_NARROWER) {
+  if (settings.listenBw == BK4819_FILTER_BW_6K) {
     settings.listenBw = BK4819_FILTER_BW_WIDE;
   } else {
     settings.listenBw++;

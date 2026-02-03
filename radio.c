@@ -18,9 +18,13 @@
 #include <string.h>
 
 #include "am_fix.h"
+#include "app/cwkeyer.h"
 #include "app/dtmf.h"
 #ifdef ENABLE_FMRADIO
 	#include "app/fm.h"
+#endif
+#ifdef ENABLE_CW_MODULATOR
+	#include "app/app.h"
 #endif
 #include "audio.h"
 #include "bsp/dp32g030/gpio.h"
@@ -36,7 +40,9 @@
 #include "radio.h"
 #include "settings.h"
 #include "ui/menu.h"
+#include "driver/uart.h"
 
+#include "external/printf/printf.h" // briand
 VFO_Info_t    *gTxVfo;
 VFO_Info_t    *gRxVfo;
 VFO_Info_t    *gCurrentVfo;
@@ -47,6 +53,10 @@ const char gModulationStr[MODULATION_UKNOWN][4] = {
 	[MODULATION_FM]="FM",
 	[MODULATION_AM]="AM",
 	[MODULATION_USB]="USB",
+
+#ifdef ENABLE_CW_MODULATOR
+	[MODULATION_CW]="CW",
+#endif
 
 #ifdef ENABLE_BYP_RAW_DEMODULATORS
 	[MODULATION_BYP]="BYP",
@@ -294,7 +304,11 @@ void RADIO_ConfigureChannel(const unsigned int VFO, const unsigned int configure
 		{
 			const uint8_t d4 = data[4];
 			pVfo->FrequencyReverse  = !!((d4 >> 0) & 1u);
-			pVfo->CHANNEL_BANDWIDTH = !!((d4 >> 1) & 1u);
+			#ifdef ENABLE_EXTRA_FILTER
+				pVfo->CHANNEL_BANDWIDTH =   ((d4 >> 5) & 3u);
+			#else
+				pVfo->CHANNEL_BANDWIDTH = !!((d4 >> 1) & 1u);
+			#endif
 			pVfo->OUTPUT_POWER      =   ((d4 >> 2) & 3u);
 			pVfo->BUSY_CHANNEL_LOCK = !!((d4 >> 4) & 1u);
 		}
@@ -393,8 +407,12 @@ void RADIO_ConfigureSquelchAndOutputPower(VFO_Info_t *pInfo)
 
 	FREQUENCY_Band_t Band = FREQUENCY_GetBand(pInfo->pRX->Frequency);
 	uint16_t Base = (Band < BAND4_174MHz) ? 0x1E60 : 0x1E00;
-
-	if (gEeprom.SQUELCH_LEVEL == 0)
+		
+	if (gEeprom.SQUELCH_LEVEL == 0
+	#ifdef ENABLE_CW_MODULATOR
+		|| pInfo->Modulation == MODULATION_CW   // briand - TOTO revisit squelch
+	#endif
+	)
 	{	// squelch == 0 (off)
 		pInfo->SquelchOpenRSSIThresh    = 0;     // 0 ~ 255
 		pInfo->SquelchOpenNoiseThresh   = 127;   // 127 ~ 0
@@ -527,7 +545,10 @@ void RADIO_SetupRegisters(bool switchToForeground)
 {
 	BK4819_FilterBandwidth_t Bandwidth = gRxVfo->CHANNEL_BANDWIDTH;
 
-	AUDIO_AudioPathOff();
+#ifdef ENABLE_CW_MODULATOR
+	if (gRxVfo->Modulation == MODULATION_CW)
+		AUDIO_AudioPathOff();
+#endif
 
 	gEnableSpeaker = false;
 
@@ -540,6 +561,7 @@ void RADIO_SetupRegisters(bool switchToForeground)
 			[[fallthrough]];
 		case BK4819_FILTER_BW_WIDE:
 		case BK4819_FILTER_BW_NARROW:
+		case BK4819_FILTER_BW_1p7K:
 			#ifdef ENABLE_AM_FIX
 //				BK4819_SetFilterBandwidth(Bandwidth, gRxVfo->Modulation == MODULATION_AM && gSetting_AM_fix);
 				BK4819_SetFilterBandwidth(Bandwidth, true);
@@ -576,7 +598,15 @@ void RADIO_SetupRegisters(bool switchToForeground)
 		else
 			Frequency = NoaaFrequencyTable[gNoaaChannel];
 	#else
-		Frequency = gRxVfo->pRX->Frequency;
+		Frequency = gRxVfo->pRX->Frequency
+	#if ENABLE_CW_MODULATOR
+		- (gRxVfo->Modulation == MODULATION_CW ? gEeprom.CW_TONE_FREQUENCY : 0) // CW BFO offset
+		;
+			// char buf[64];
+			// sprintf_(buf, "RX freq: %d Hz, offset: %d Hz\r\n", gRxVfo->pRX->Frequency * 10, (10 * gEeprom.CW_TONE_FREQUENCY));
+			// UART_Send(buf, strlen(buf));
+	#endif
+	;
 	#endif
 	BK4819_SetFrequency(Frequency);
 
@@ -757,11 +787,19 @@ void RADIO_SetTxParameters(void)
 {
 	BK4819_FilterBandwidth_t Bandwidth = gCurrentVfo->CHANNEL_BANDWIDTH;
 
-	AUDIO_AudioPathOff();
+	#ifdef ENABLE_CW_MODULATOR
+	if((gTxVfo->Modulation != MODULATION_CW) || (gEeprom.CW_SIDETONE_LEVEL == 0))
+	#endif
+		AUDIO_AudioPathOff();
 
 	gEnableSpeaker = false;
 
 	BK4819_ToggleGpioOut(BK4819_GPIO0_PIN28_RX_ENABLE, false);
+
+	#ifdef ENABLE_CW_MODULATOR
+	RADIO_SetModulation(gTxVfo->Modulation);
+	#endif
+	
 
 	switch (Bandwidth)
 	{
@@ -777,7 +815,12 @@ void RADIO_SetTxParameters(void)
 				BK4819_SetFilterBandwidth(Bandwidth, false);
 			#endif
 			break;
-	}
+	#ifdef ENABLE_EXTRA_FILTER
+		case BK4819_FILTER_BW_1p7K:
+			BK4819_SetFilterBandwidth(BK4819_FILTER_BW_1p7K, false);
+			break;
+	#endif
+	}	
 
 	BK4819_SetFrequency(gCurrentVfo->pTX->Frequency);
 
@@ -786,17 +829,29 @@ void RADIO_SetTxParameters(void)
 
 	BK4819_PrepareTransmit();
 
-	SYSTEM_DelayMs(10);
+	#ifdef ENABLE_CW_MODULATOR
+		SYSTEM_DelayMs(1);
+	#else
+		SYSTEM_DelayMs(10);
+	#endif
 
 	BK4819_PickRXFilterPathBasedOnFrequency(gCurrentVfo->pTX->Frequency);
 
 	BK4819_ToggleGpioOut(BK4819_GPIO1_PIN29_PA_ENABLE, true);
 
-	SYSTEM_DelayMs(5);
+	#ifdef ENABLE_CW_MODULATOR
+		SYSTEM_DelayMs(1);
+	#else
+		SYSTEM_DelayMs(5);
+	#endif
 
 	BK4819_SetupPowerAmplifier(gCurrentVfo->TXP_CalculatedSetting, gCurrentVfo->pTX->Frequency);
 
-	SYSTEM_DelayMs(10);
+	#ifdef ENABLE_CW_MODULATOR
+		SYSTEM_DelayMs(1);
+	#else
+		SYSTEM_DelayMs(10);
+	#endif
 
 	switch (gCurrentVfo->pTX->CodeType)
 	{
@@ -827,6 +882,11 @@ void RADIO_SetModulation(ModulationMode_t modulation)
 		case MODULATION_AM:
 			mod = BK4819_AF_AM;
 			break;
+#ifdef ENABLE_CW_MODULATOR
+		case MODULATION_CW:
+			gMonitor = true;
+			[[fallthrough]];
+#endif	
 		case MODULATION_USB:
 			mod = BK4819_AF_BASEBAND2;
 			break;
@@ -840,11 +900,16 @@ void RADIO_SetModulation(ModulationMode_t modulation)
 			break;
 #endif
 	}
-
+	
 	BK4819_SetAF(mod);
 
 	BK4819_SetRegValue(afDacGainRegSpec, 0xF);
-	BK4819_WriteRegister(BK4819_REG_3D, modulation == MODULATION_USB ? 0 : 0x2AAB);
+	    BK4819_WriteRegister(
+		BK4819_REG_3D, (modulation == MODULATION_USB
+	#ifdef ENABLE_CW_MODULATOR
+		 || modulation == MODULATION_CW
+	#endif
+		) ? 0 : 0x2AAB);
 	BK4819_SetRegValue(afcDisableRegSpec, modulation != MODULATION_FM);
 
 	RADIO_SetupAGC(modulation == MODULATION_AM, false);
@@ -852,30 +917,24 @@ void RADIO_SetModulation(ModulationMode_t modulation)
 
 void RADIO_SetupAGC(bool listeningAM, bool disable)
 {
-	static uint8_t lastSettings;
-	uint8_t newSettings = (listeningAM << 1) | (disable << 1);
+	static uint8_t lastSettings = 0xff; // force update first time
+	uint8_t newSettings = (listeningAM << 1) | disable;
 	if(lastSettings == newSettings)
 		return;
 	lastSettings = newSettings;
 
-
-	if(!listeningAM) { // if not actively listening AM we don't need any AM specific regulation
-		BK4819_SetAGC(!disable);
-		BK4819_InitAGC(false);
-	}
-	else {
 #ifdef ENABLE_AM_FIX
-		if(gSetting_AM_fix) { // if AM fix active lock AGC so AM-fix can do it's job
-			BK4819_SetAGC(0);
-			AM_fix_enable(!disable);
-		}
-		else
+    // AM fix mode: disable AGC, let AM_fix handle gain control
+    if(listeningAM && gSetting_AM_fix) {
+        BK4819_SetAGC(0);
+        AM_fix_enable(!disable);
+        return;
+    }
 #endif
-		{
-			BK4819_SetAGC(!disable);
-			BK4819_InitAGC(true);
-		}
-	}
+
+    // Standard AGC mode (FM or AM without fix)
+    BK4819_SetAGC(!disable);
+    BK4819_InitAGC(listeningAM);
 }
 
 void RADIO_SetVfoState(VfoState_t State)
@@ -1040,3 +1099,40 @@ void RADIO_PrepareCssTX(void)
 		RADIO_SendCssTail();
 	RADIO_SetupRegisters(true);
 }
+
+#ifdef ENABLE_CW_MODULATOR
+
+void RADIO_CW_BeginResume(void)
+{
+	gCW_State = CW_TRANSMITTING;
+	// Setup and begin CW transmission, either first time or resuming after suspend
+	BK4819_SetupPowerAmplifier(gCurrentVfo->TXP_CalculatedSetting, gCurrentVfo->pTX->Frequency);
+
+	// Setup the Tx/Rx blocks for CW transmission
+	BK4819_EnableTXLink();
+
+	// Set local AF sidetone freq in Hz
+	BK4819_SetScrambleFrequencyControlWord(gEeprom.CW_TONE_FREQUENCY * 10);
+
+	// Turn on the red LED
+	BK4819_ToggleGpioOut(BK4819_GPIO5_PIN1_RED, true);
+}
+
+// Suspend CW transmission - "QSK" key up, be ready to start RF again quickly - don't actually exit TX mode
+void RADIO_CW_Suspend(void)
+{
+	gCW_State = CW_SUSPENDED;
+
+	// Set PA bias to 0
+	BK4819_SetupPowerAmplifier(0, 0);
+
+	// 0 gain on tone1
+	//BK4819_WriteRegister(BK4819_REG_70,	BK4819_REG_70_ENABLE_TONE1 );
+
+	// Set TONE1 to 0 Hz - this works better than gain to disable sidetone
+	BK4819_SetScrambleFrequencyControlWord(0);
+	
+	// Turn off the red LED
+	BK4819_ToggleGpioOut(BK4819_GPIO5_PIN1_RED, false);
+}
+#endif

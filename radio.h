@@ -30,7 +30,11 @@ enum {
 
 enum {
 	BANDWIDTH_WIDE = 0,
-	BANDWIDTH_NARROW
+	BANDWIDTH_NARROW,
+	BANDWIDTH_6K,
+#ifdef ENABLE_EXTRA_FILTER
+	BANDWIDTH_1p7K
+#endif
 };
 
 enum PTT_ID_t {
@@ -59,6 +63,10 @@ typedef enum {
 	MODULATION_FM,
 	MODULATION_AM,
 	MODULATION_USB,
+
+#ifdef ENABLE_CW_MODULATOR
+	MODULATION_CW,
+#endif
 
 #ifdef ENABLE_BYP_RAW_DEMODULATORS
 	MODULATION_BYP,
@@ -167,5 +175,10 @@ void     RADIO_PrepareTX(void);
 void     RADIO_SendCssTail(void);
 void     RADIO_PrepareCssTX(void);
 void     RADIO_SendEndOfTransmission(void);
+
+#ifdef ENABLE_CW_MODULATOR
+void     RADIO_CW_Suspend(void);
+void     RADIO_CW_BeginResume(void);
+#endif
 
 #endif

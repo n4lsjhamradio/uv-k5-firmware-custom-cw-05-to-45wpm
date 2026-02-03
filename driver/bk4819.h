@@ -48,7 +48,10 @@ enum BK4819_FilterBandwidth_t
 {
 	BK4819_FILTER_BW_WIDE = 0,
 	BK4819_FILTER_BW_NARROW,
-	BK4819_FILTER_BW_NARROWER
+	BK4819_FILTER_BW_6K,
+#ifdef ENABLE_EXTRA_FILTER
+	BK4819_FILTER_BW_1p7K
+#endif
 };
 
 typedef enum BK4819_FilterBandwidth_t BK4819_FilterBandwidth_t;

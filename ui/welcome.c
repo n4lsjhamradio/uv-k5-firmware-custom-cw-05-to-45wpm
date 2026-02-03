@@ -39,6 +39,21 @@ void UI_DisplayReleaseKeys(void)
 	ST7565_BlitFullScreen();
 }
 
+#ifdef ENABLE_CW_MODULATOR
+void UI_DisplayReleasePaddle(void)
+{
+	memset(gStatusLine,  0, sizeof(gStatusLine));
+	UI_DisplayClear();
+
+	UI_PrintString("CW KEY STUCK", 0, 127, 0, 10);
+	UI_PrintString("Port Input", 0, 127, 2, 10);
+	UI_PrintString("disabled", 0, 127, 4, 10);
+
+	ST7565_BlitStatusLine();  // blank status line
+	ST7565_BlitFullScreen();
+}
+#endif
+
 void UI_DisplayWelcome(void)
 {
 	char WelcomeString0[16];
