@@ -32,6 +32,7 @@
 #include "app/app.h"
 #include "app/dtmf.h"
 #ifdef ENABLE_CW_MODULATOR
+	#include "app/cwapp.h"
 	#include "app/cwkeyer.h"
 #endif
 #include "bsp/dp32g030/gpio.h"
@@ -45,7 +46,8 @@
 #ifdef ENABLE_UART
 	#include "driver/uart.h"
 #endif
-#ifdef ENABLE_MILLIS
+
+#if defined(ENABLE_MILLIS) || defined(ENABLE_CW_MODULATOR)
 	#include "driver/timer.h"
 #endif
 
@@ -82,9 +84,9 @@ void Main(void)
 	SYSTICK_Init();
 	BOARD_Init();
 
-#ifdef ENABLE_MILLIS
+	#if defined(ENABLE_MILLIS) || defined(ENABLE_CW_MODULATOR)
 	TIM0_INIT();
-#endif
+	#endif
 
 	boot_counter_10ms = 250;   // 2.5 sec
 
@@ -158,8 +160,8 @@ void Main(void)
 	}
 
 #ifdef ENABLE_CW_MODULATOR
-	// Check CW keyer inputs at startup - if stuck, fall back to handkey mode - skip during hidden mode boot
-	if (gF_LOCK != true && !CW_CheckKeyerInputs(gEeprom.CW_KEY_INPUT)) {
+	// Check CW keyer inputs at startup - if stuck, fall back to handkey mode
+	if (!gF_LOCK && !CW_CheckKeyerInputs(gEeprom.CW_KEY_INPUT)) {
 		gEeprom.CW_KEY_INPUT = CW_KEY_INPUT_HANDKEY;
 		gEeprom.CW_KEY_INPUT_MENU = 0;
 		gRequestSaveSettings = true;
@@ -255,8 +257,17 @@ void Main(void)
 #endif
 	}
 
-	while (true) {  // on average, about 80 loops per mS
+	while (true) {
 		APP_Update();
+
+#ifdef ENABLE_CW_MODULATOR
+		static uint16_t s_last_millis = 0;
+		const uint16_t current_millis = timer_millis_low16();
+		if (timer_millis_low16_since(s_last_millis) > 0) {
+			s_last_millis = current_millis;
+			CW_AppUpdate();
+		}
+#endif
 
 		if (gNextTimeslice) {
 

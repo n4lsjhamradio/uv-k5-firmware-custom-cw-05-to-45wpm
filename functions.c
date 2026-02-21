@@ -42,7 +42,7 @@
 #include "settings.h"
 #include "ui/status.h"
 #include "ui/ui.h"
-
+#include "driver/uart.h"
 FUNCTION_Type_t gCurrentFunction;
 
 bool FUNCTION_IsRx()
@@ -233,10 +233,11 @@ void FUNCTION_Transmit_CW()
 {
 	// Mark CW TX in progress and clear suspend counter
 	gCW_State = CW_TRANSMITTING;
-	gCW_SuspendCountdown_10ms = 0;
+	gCW_SuspendCounter_1ms = 0;
 	
 	gUpdateStatus = true;
 
+	AUDIO_AudioPathOn();  // briand TODO revisit for audio pops
 	GUI_DisplayScreen();
 	
 	// if DTMF is enabled when TX'ing, it changes the TX audio filtering !! .. 1of11
@@ -245,7 +246,6 @@ void FUNCTION_Transmit_CW()
 	// removed all the DTMF calling code, not needed for CW
 
 	RADIO_SetTxParameters();
-
 	// turn the Green LED off
 	BK4819_ToggleGpioOut(BK4819_GPIO6_PIN2_GREEN, false);
 
@@ -253,7 +253,7 @@ void FUNCTION_Transmit_CW()
 	if (gSetting_backlight_on_tx_rx & BACKLIGHT_ON_TR_TX) {
 		BACKLIGHT_TurnOn();
 	}
-	
+
 	// Don't send AF to RF during CW
 	BK4819_EnterTxMute();	
 	BK4819_WriteRegister(BK4819_REG_70,
@@ -261,6 +261,7 @@ void FUNCTION_Transmit_CW()
 		(gEeprom.CW_SIDETONE_LEVEL << BK4819_REG_70_SHIFT_TONE1_TUNING_GAIN));
 	BK4819_SetAF(BK4819_AF_ALAM);
 
+	gEnableSpeaker = true;
 	RADIO_CW_BeginResume();
 }
 #endif
@@ -297,7 +298,13 @@ void FUNCTION_Select(FUNCTION_Type_t Function)
 			break;
 
 		case FUNCTION_MONITOR:
-			gMonitor = true;
+			#ifdef ENABLE_CW_MODULATOR
+				if (!gMonitorTemp)
+					gMonitor = true;
+				gMonitorTemp = false;
+			#else
+				gMonitor = true;
+			#endif
 			break;
 
 		case FUNCTION_INCOMING:
