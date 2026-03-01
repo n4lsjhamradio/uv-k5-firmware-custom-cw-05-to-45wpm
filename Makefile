@@ -515,7 +515,9 @@ clean:
 	$(RM) firmware_ring_b15 firmware_ring_b15.bin firmware_ring_b15.packed.bin
 
 ring_b15:
+	$(RM) $(OBJS) $(DEPS)
 	$(MAKE) TARGET=firmware_ring_b15 EXTRA_CFLAGS=-DUSE_B15_FOR_RING
+	$(RM) $(OBJS) $(DEPS)
 
 doxygen:
 	doxygen
