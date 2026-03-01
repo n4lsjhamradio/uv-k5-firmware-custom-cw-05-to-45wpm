@@ -27,6 +27,7 @@
 #include "gpio.h"
 #include "system.h"
 #include "systick.h"
+#include "../misc.h"
 
 
 #ifndef ARRAY_SIZE
@@ -789,9 +790,10 @@ void BK4819_SetupSquelch(
 	BK4819_WriteRegister(BK4819_REG_78, ((uint16_t)SquelchOpenRSSIThresh   << 8) | SquelchCloseRSSIThresh);
 
 #ifdef ENABLE_CW_MODULATOR
-	if(gRxVfo->Modulation != MODULATION_CW)
-#endif		
-	BK4819_SetAF(BK4819_AF_MUTE);
+	// Only skip AF_MUTE for CW while monitor mode is active
+	if(gRxVfo->Modulation != MODULATION_CW || !gMonitor)
+#endif
+		BK4819_SetAF(BK4819_AF_MUTE);
 
 	BK4819_RX_TurnOn();
 }
@@ -845,15 +847,26 @@ void BK4819_RX_TurnOn(void)
 	
 #ifdef ENABLE_CW_MODULATOR
 	if(gRxVfo->Modulation == MODULATION_CW)
-	BK4819_WriteRegister(BK4819_REG_30, 
-		BK4819_REG_30_ENABLE_VCO_CALIB  |
-		BK4819_REG_30_ENABLE_DISC_MODE  |
-		BK4819_REG_30_ENABLE_PLL_VCO    |
-	 	BK4819_REG_30_ENABLE_AF_DAC);
+	{
+		BK4819_WriteRegister(BK4819_REG_30,
+			BK4819_REG_30_ENABLE_AF_DAC);  // leave on, reduces pops
+		BK4819_WriteRegister(BK4819_REG_30,
+			BK4819_REG_30_ENABLE_VCO_CALIB |
+			BK4819_REG_30_DISABLE_UNKNOWN |
+			BK4819_REG_30_ENABLE_RX_LINK |
+			BK4819_REG_30_ENABLE_AF_DAC |
+			BK4819_REG_30_DISABLE_DISC_MODE |  // don't need for CW
+			BK4819_REG_30_ENABLE_PLL_VCO |
+			BK4819_REG_30_DISABLE_PA_GAIN |
+			BK4819_REG_30_DISABLE_MIC_ADC |
+			BK4819_REG_30_DISABLE_TX_DSP |
+			BK4819_REG_30_ENABLE_RX_DSP );
+	}
 	else
+	{
 #endif
 		BK4819_WriteRegister(BK4819_REG_30, 0);
-	BK4819_WriteRegister(BK4819_REG_30,
+		BK4819_WriteRegister(BK4819_REG_30,
 		BK4819_REG_30_ENABLE_VCO_CALIB |
 		BK4819_REG_30_DISABLE_UNKNOWN |
 		BK4819_REG_30_ENABLE_RX_LINK |
@@ -864,6 +877,9 @@ void BK4819_RX_TurnOn(void)
 		BK4819_REG_30_DISABLE_MIC_ADC |
 		BK4819_REG_30_DISABLE_TX_DSP |
 		BK4819_REG_30_ENABLE_RX_DSP );
+#ifdef ENABLE_CW_MODULATOR
+	}
+#endif
 }
 
 void BK4819_PickRXFilterPathBasedOnFrequency(uint32_t Frequency)
@@ -1187,13 +1203,19 @@ void BK4819_TxOn_Beep(void)
 
 #ifdef ENABLE_CW_MODULATOR
 	if(gTxVfo->Modulation == MODULATION_CW) {
-		// These bits are common to RX/TX, no need to turn off
 		BK4819_WriteRegister(BK4819_REG_30, 
-			BK4819_REG_30_ENABLE_VCO_CALIB  |
-			BK4819_REG_30_ENABLE_DISC_MODE  |
-			BK4819_REG_30_ENABLE_PLL_VCO	|
-			BK4819_REG_30_ENABLE_AF_DAC);  // AF DAC? Yeah, it prevents popping
-		BK4819_WriteRegister(BK4819_REG_30, (0xC1FE | BK4819_REG_30_ENABLE_AF_DAC | BK4819_REG_30_ENABLE_RX_DSP) & ~BK4819_REG_30_ENABLE_MIC_ADC);
+			BK4819_REG_30_ENABLE_AF_DAC);  // Leave AF DAC on, it reduces pops
+		BK4819_WriteRegister(BK4819_REG_30,
+			BK4819_REG_30_ENABLE_VCO_CALIB   |
+			BK4819_REG_30_ENABLE_UNKNOWN     |
+			BK4819_REG_30_DISABLE_RX_LINK    |
+			BK4819_REG_30_DISABLE_AF_DAC     |
+			BK4819_REG_30_DISABLE_DISC_MODE  |  // don't need for CW
+			BK4819_REG_30_ENABLE_PLL_VCO     |
+			BK4819_REG_30_ENABLE_PA_GAIN     |
+			BK4819_REG_30_DISABLE_MIC_ADC    |  // don't need for CW
+			BK4819_REG_30_ENABLE_TX_DSP      |  // probably don't need?
+			BK4819_REG_30_DISABLE_RX_DSP);
 	} else 
 	{
 #endif
