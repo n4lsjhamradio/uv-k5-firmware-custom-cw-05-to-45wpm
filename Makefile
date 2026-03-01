@@ -512,6 +512,10 @@ bsp/dp32g030/%.h: hardware/dp32g030/%.def
 
 clean:
 	$(RM) $(call FixPath, $(TARGET).bin $(TARGET).packed.bin $(TARGET) $(OBJS) $(DEPS))
+	$(RM) firmware_ring_b15 firmware_ring_b15.bin firmware_ring_b15.packed.bin
+
+ring_b15:
+	$(MAKE) TARGET=firmware_ring_b15 EXTRA_CFLAGS=-DUSE_B15_FOR_RING
 
 doxygen:
 	doxygen
