@@ -1,6 +1,6 @@
-# N4LSJ's High Speed mod for the NR7Y mod.. 2026-06-09
+# N4LSJ's High Speed mod for the NR7Y mod.. 2026-06-20
 
-This repository only does one thing (so far) - Allows the user to go from 05 to 45 WPM.
+This repository only does one thing (so far) - Allows the user to go from 05 to 50 WPM.
 
 # NR7Y's CW mod for the egzumer firmware
 

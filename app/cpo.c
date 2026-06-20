@@ -36,7 +36,7 @@
 #ifdef ENABLE_CODE_PRACTICE
 
 bool gCW_CpoActive = false;
-bool gCW_CpoBacklightOn = false;
+bool gCW_CpoBacklightOn = true;
 static bool s_needs_redraw = false;
 bool wpm_changed = false;
 static bool s_flashlight_sending = false;
@@ -44,6 +44,7 @@ static bool s_flashlight_sending = false;
 void CPO_Enter(void)
 {
     CW_KeyerReconfigure(true);
+	gCW_CpoBacklightOn = (gSetting_backlight_on_tx_rx & BACKLIGHT_ON_TR_TX) != 0;
 	gCW_CpoActive = true;
 	s_needs_redraw = true;
 	gRequestDisplayScreen = DISPLAY_CPO;
@@ -55,7 +56,7 @@ void CPO_Enter(void)
 	BK4819_WriteRegister(BK4819_REG_3F, 0x0000);        // Disable interrupts
 	BK4819_SetAF(BK4819_AF_ALAM);
 	AUDIO_AudioPathOn();
-    CW_ClearTxDisplay();
+	CW_ClearTxDisplay();
 }
 
 void CPO_Exit(void)
@@ -83,10 +84,6 @@ void CPO_Tick(void)
 		return;
 	}
 
-	if (gCW_CpoBacklightOn) {
-		gBacklightCountdown_500ms = 2;
-	}
-
 	if (s_needs_redraw | gCW_TX_DisplayUpdated) {
 		s_needs_redraw = false;
 		gRequestDisplayScreen = DISPLAY_CPO;
@@ -103,7 +100,7 @@ void CPO_ProcessKeys(KEY_Code_t Key, bool bKeyPressed, bool bKeyHeld)
 	switch (Key) {
 
 	case KEY_UP:
-		if (gEeprom.CW_KEY_WPM < 45) {
+		if (gEeprom.CW_KEY_WPM < 50) {
 			gEeprom.CW_KEY_WPM++;
 #ifdef ENABLE_CW_MODULATOR
 			CW_UpdateWPM();
@@ -128,7 +125,6 @@ void CPO_ProcessKeys(KEY_Code_t Key, bool bKeyPressed, bool bKeyHeld)
 		gCW_CpoBacklightOn = !gCW_CpoBacklightOn;
 		if (gCW_CpoBacklightOn) {
 			BACKLIGHT_TurnOn();
-			gBacklightCountdown_500ms = 2;
             gUpdateDisplay = true;
 		} else {
 			BACKLIGHT_TurnOff();
