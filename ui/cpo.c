@@ -47,5 +47,6 @@ void UI_DisplayCPO(void)
 		UI_PrintStringSmallNormal("^", 121, 0, 6);
 	}
 #endif
+    /* CW_ClearTxDisplay(); */
 	ST7565_BlitFullScreen();
 }
