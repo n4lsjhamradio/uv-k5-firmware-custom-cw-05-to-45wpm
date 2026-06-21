@@ -87,7 +87,15 @@ static const MorseCode_t MORSE_TABLE[] = {
 	{'-', 6, 0b100001},   // -....-
 	{'+', 5, 0b01010},   // .-.-. AR prosign
 	{'(', 5, 0b01101},   // -.--.  KN prosign
-	{'&', 5, 0b00010}    // .-...  AS prosign
+	{'&', 5, 0b00010},    // .-...  AS prosign
+    {'!', 6, 0b110101}, // -.-.-- exclam
+    {')', 6, 0b101101}, //-.--.- r_paren
+    {':', 6, 0b000111}, // ---... colon
+    {';', 6, 0b010101}, // -.-.-. semi
+    {'_', 6, 0b101100}, // ..--.- underscore
+    {'"', 6, 0b010010}, // .-..-. quotation
+    {'$', 7, 0b1001000}, // ...-..- dollar ( 7 dits wide )
+    {'@', 6, 0b010110}   // .--.-. at sign
 };
 
 #define MORSE_TABLE_SIZE (sizeof(MORSE_TABLE) / sizeof(MORSE_TABLE[0]))
@@ -131,6 +139,14 @@ bool CW_ValidateChar(char ch)
 	if (ch == '(') return true;
 	if (ch == '=') return true;
 	if (ch == '?') return true;
+    if (ch == '!') return true;
+    if (ch == ')') return true;
+    if (ch == ':') return true;
+    if (ch == ';') return true;
+    if (ch == '_') return true;
+    if (ch == '"') return true;
+    if (ch == '$') return true;
+    if (ch == '@') return true;
 	return false;
 }
 
@@ -336,7 +352,7 @@ uint8_t CW_FormatMacroDisplay(uint8_t macroIndex, char *display, uint8_t maxChar
 // Decode accumulated pattern into a character
 static char CW_DecodePattern(uint8_t pattern, uint8_t length)
 {
-	if (length == 0 || length > 6)
+	if (length == 0 || length > 7)
 		return 0;
 	
 	for (unsigned int i = 0; i < MORSE_TABLE_SIZE; i++) {
@@ -378,18 +394,32 @@ void CW_EncoderProcessElement(CW_ElementType_t element)
 	switch (element) {
 	case CW_ELEMENT_DIT:
 		// Add a dit (0) to the pattern
-		if (s_encoder_length < 6) {
+		if (s_encoder_length <= 8) {
 			// Pattern LSB first, so no shift needed for new bit
 			s_encoder_length++;
 		}
+#if CW_ENCODER_DEBUG
+		{
+			char buf[64];
+			sprintf_(buf, "LEN: %d\r\n", s_encoder_length);
+			UART_Send(buf, strlen(buf));
+		}
+#endif
 		break;
 		
 	case CW_ELEMENT_DAH:
 		// Add a dah (1) to the pattern
-		if (s_encoder_length < 6) {
+		if (s_encoder_length <= 8) {
 			s_encoder_pattern |= (1 << s_encoder_length);
 			s_encoder_length++;
 		}
+#if CW_ENCODER_DEBUG
+		{
+			char buf[64];
+			sprintf_(buf, "LEN: %d\r\n", s_encoder_length);
+			UART_Send(buf, strlen(buf));
+		}
+#endif
 		break;
 		
 	case CW_ELEMENT_INTER_CHAR_SPACE:
