@@ -1,6 +1,7 @@
 # N4LSJ's High Speed mod for the NR7Y mod.. 2026-06-20
 
-This repository only does one thing (so far) - Allows the user to go from 05 to 50 WPM.
+This repository only does one thing (so far) - Allows the user to go from 05 to 50 WPM.  THIS IS FOR V1 RADIOS ONLY.
+It will not work with "V3" radios.  If you don't know what this means, skip this repository.
 
 # NR7Y's CW mod for the egzumer firmware
 
